@@ -1,0 +1,115 @@
+# ==============================================================================
+# TorrentFlow Mobile — Production .gitignore
+# Expo / React Native / Android (Kotlin & CMake C++) / Python 3.11 / SQLite
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Dependencies & Package Managers
+# ------------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------------------------------------------
+# Expo & Metro Bundler
+# ------------------------------------------------------------------------------
+.expo/
+.expo-shared/
+dist/
+web-build/
+expo-env.d.ts
+
+# ------------------------------------------------------------------------------
+# Android & Native Builds
+# ------------------------------------------------------------------------------
+android/app/build/
+android/build/
+android/.gradle/
+android/.cxx/
+android/app/.cxx/
+android/local.properties
+android/*.iml
+android/app/*.iml
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.hprof
+*.jsbundle
+
+# Android Keystores & Signing Keys (Do NOT commit production release secrets)
+*.jks
+*.keystore
+!debug.keystore
+
+# ------------------------------------------------------------------------------
+# Python (Caches, Environments & Bytecode)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ------------------------------------------------------------------------------
+# Local Runtime Databases, Logs & Temporary Downloads
+# ------------------------------------------------------------------------------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+*.part
+torrent_downloads/
+*.tmp
+
+# ------------------------------------------------------------------------------
+# Testing & Coverage
+# ------------------------------------------------------------------------------
+coverage/
+.nyc_output/
+
+# ------------------------------------------------------------------------------
+# IDE, Editor & OS Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[tT]humbs.db
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
