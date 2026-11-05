@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project(torrentflow_native CXX)
+# Project name must be appmodules for React Native New Architecture compatibility
+project(appmodules CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,15 +18,15 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/openssl/include
 )
 
-# Native libtorrent library configuration
-# Libtorrent 2.1.x prebuilt or compiled static/shared library per ABI
-add_library(torrentflow_native SHARED
-    jni/torrent_engine_jni.cpp
-)
-
 # System and NDK libraries
 find_library(log-lib log)
 find_library(android-lib android)
+
+# Native libtorrent library configuration
+# Libtorrent 2.1.x / TorrentFlow JNI bridge shared library
+add_library(torrentflow_native SHARED
+    jni/torrent_engine_jni.cpp
+)
 
 # Compiler definitions for libtorrent 2.1.x on Android
 target_compile_definitions(torrentflow_native PRIVATE
@@ -41,4 +42,9 @@ target_link_libraries(torrentflow_native
     ${log-lib}
     ${android-lib}
 )
+
+# If building with React Native New Architecture, include React Native's application CMake setup
+if(DEFINED REACT_ANDROID_DIR)
+    include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+endif()
 
