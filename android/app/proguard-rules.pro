@@ -11,12 +11,4 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# TorrentFlow Native JNI & Services
--keepclassmembers class * {
-    native <methods>;
-}
--keep class com.torrentflow.mobile.native.** { *; }
--keepclassmembers class com.torrentflow.mobile.native.TorrentEngineJni { *; }
--keep class com.torrentflow.mobile.bridge.** { *; }
--keep class com.torrentflow.mobile.service.** { *; }
--keep class com.torrentflow.mobile.torrent.** { *; }
+# Add any project specific keep options here:

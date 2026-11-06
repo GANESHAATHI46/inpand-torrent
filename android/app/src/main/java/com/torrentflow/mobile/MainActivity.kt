@@ -1,10 +1,10 @@
 package com.torrentflow.mobile
+import android.content.Intent
+import com.torrentflow.mobile.torrent.TorrentIntentHandler
 import expo.modules.splashscreen.SplashScreenManager
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import com.torrentflow.mobile.torrent.TorrentIntentHandler
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -24,12 +24,6 @@ class MainActivity : ReactActivity() {
     // @generated end expo-splashscreen
     super.onCreate(null)
     intent?.let { TorrentIntentHandler.handleIntent(it, this) }
-  }
-
-  override fun onNewIntent(intent: Intent) {
-    super.onNewIntent(intent)
-    setIntent(intent)
-    TorrentIntentHandler.handleIntent(intent, this)
   }
 
   /**
@@ -70,5 +64,11 @@ class MainActivity : ReactActivity() {
       // Use the default back button implementation on Android S
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    TorrentIntentHandler.handleIntent(intent, this)
   }
 }
