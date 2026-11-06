@@ -68,7 +68,8 @@
     },
     "plugins": [
       "expo-router",
-      "./plugins/withTorrentEngine"
+      "./plugins/withTorrentEngine",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true

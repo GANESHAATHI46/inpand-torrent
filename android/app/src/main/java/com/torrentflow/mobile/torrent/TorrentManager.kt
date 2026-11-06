@@ -9,6 +9,7 @@ import com.torrentflow.mobile.native.TorrentEngineJni
 import com.torrentflow.mobile.service.TorrentDownloadService
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
