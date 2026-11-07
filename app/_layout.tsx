@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTorrentIntentListener } from '../src/hooks/useTorrentIntentListener';
+import { TermsModal } from '../src/components/TermsModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -19,6 +20,7 @@ function RootNav() {
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
+      <TermsModal />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.background },
@@ -38,6 +40,24 @@ function RootNav() {
         />
         <Stack.Screen
           name="torrent-details/[hash]"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="terms"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="privacy"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="licenses"
           options={{
             headerShown: false,
           }}

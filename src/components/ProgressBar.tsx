@@ -30,6 +30,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         return colors.danger;
       case 'checking':
       case 'downloading_metadata':
+      case 'connecting_peers':
+      case 'stalled':
         return colors.warning;
       case 'downloading':
       default:

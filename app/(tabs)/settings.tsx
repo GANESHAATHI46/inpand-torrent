@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Card } from '../../src/components/Card';
@@ -23,6 +24,7 @@ import { useTabScrollReset } from '../../src/hooks/useTabScrollReset';
 export default function SettingsScreen() {
   const { colors, spacing, typography, themeMode, setThemeMode, isDark } = useTheme();
   const db = DatabaseService.getInstance();
+  const router = useRouter();
   const scrollRef = useTabScrollReset<ScrollView>();
 
   const [settings, setSettings] = useState<SessionSettings>({
@@ -37,7 +39,7 @@ export default function SettingsScreen() {
     wifiOnly: false,
     mobileDataWarning: true,
     listenPort: 6881,
-    defaultSavePath: '/storage/emulated/0/Download/TorrentFlow',
+    defaultSavePath: '/storage/emulated/0/Download/InpandTorrent',
     darkMode: true,
   });
 
@@ -275,12 +277,54 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
+        {/* Legal & Policies */}
+        <Text style={[styles.groupTitle, { color: colors.primaryLight, marginTop: spacing.lg }]}>
+          LEGAL & POLICIES
+        </Text>
+        <Card style={{ marginTop: spacing.xs }}>
+          <TouchableOpacity
+            style={[styles.legalRow, { borderBottomColor: colors.divider }]}
+            onPress={() => router.push('/terms' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.legalIconLabel}>
+              <Ionicons name="document-text-outline" size={20} color={colors.primaryLight} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Terms & Conditions</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.legalRow, { borderBottomColor: colors.divider }]}
+            onPress={() => router.push('/privacy' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.legalIconLabel}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={colors.success} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Privacy Policy</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.legalRowLast}
+            onPress={() => router.push('/licenses' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.legalIconLabel}>
+              <Ionicons name="code-slash-outline" size={20} color={colors.accent} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Open Source Licenses</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        </Card>
+
         {/* Application & Handover Details */}
         <Text style={[styles.groupTitle, { color: colors.primaryLight, marginTop: spacing.lg }]}>
-          ABOUT & HANDOVER
+          ABOUT INPAND TORRENT
         </Text>
         <Card style={{ marginTop: spacing.xs, marginBottom: spacing.xl }}>
-          <Text style={[styles.settingTitle, { color: colors.text }]}>TorrentFlow Mobile</Text>
+          <Text style={[styles.settingTitle, { color: colors.text }]}>Inpand Torrent</Text>
           <Text style={[styles.settingSub, { color: colors.textSecondary, marginTop: 4 }]}>
             Production BitTorrent client for Android with libtorrent 2.1.x C++ engine and background foreground service.
           </Text>
@@ -289,6 +333,7 @@ export default function SettingsScreen() {
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Package: com.torrentflow.mobile</Text>
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Target SDK: Android 14 / API 34</Text>
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Native ABI: arm64-v8a</Text>
+            <Text style={[styles.infoText, { color: colors.textMuted }]}>Protocol: BitTorrent 2.1.x / DHT / PEX / LSD</Text>
           </View>
         </Card>
       </ScrollView>
@@ -375,6 +420,23 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  legalRowLast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  legalIconLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 

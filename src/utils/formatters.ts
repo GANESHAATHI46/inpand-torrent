@@ -47,8 +47,12 @@ export function formatStatusLabel(status: TorrentStatus): string {
       return 'Checking Files';
     case 'downloading_metadata':
       return 'Fetching Metadata';
+    case 'connecting_peers':
+      return 'Connecting to Peers';
     case 'downloading':
       return 'Downloading';
+    case 'stalled':
+      return 'Stalled (No Peers)';
     case 'finished':
       return 'Completed';
     case 'seeding':

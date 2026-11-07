@@ -70,7 +70,7 @@ class TorrentDownloadService : Service() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "TorrentFlow:DownloadWakeLock"
+                "InpandTorrent:DownloadWakeLock"
             ).apply {
                 setReferenceCounted(false)
                 acquire(24 * 60 * 60 * 1000L) // Max 24 hours
@@ -79,7 +79,7 @@ class TorrentDownloadService : Service() {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             wifiLock = wifiManager.createWifiLock(
                 WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                "TorrentFlow:DownloadWifiLock"
+                "InpandTorrent:DownloadWifiLock"
             ).apply {
                 setReferenceCounted(false)
                 acquire()
@@ -106,7 +106,7 @@ class TorrentDownloadService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "BitTorrent Active Downloads",
+                "Inpand Torrent Active Downloads",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Shows live download speed and progress for background torrent transfers"
@@ -149,7 +149,7 @@ class TorrentDownloadService : Service() {
         val contentText = "$activeCount active transfer${if (activeCount == 1) "" else "s"} • $speedFormatted"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TorrentFlow Mobile")
+            .setContentTitle("Inpand Torrent")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(contentPendingIntent)

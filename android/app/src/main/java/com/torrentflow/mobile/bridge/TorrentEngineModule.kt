@@ -5,6 +5,7 @@ import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.torrentflow.mobile.torrent.TorrentIntentHandler
 import com.torrentflow.mobile.torrent.TorrentManager
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 
@@ -185,10 +186,56 @@ class TorrentEngineModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod
+    fun restoreTorrent(
+        infoHash: String,
+        name: String,
+        savePath: String,
+        totalSize: Double,
+        downloadedBytes: Double,
+        status: String,
+        promise: Promise
+    ) {
+        try {
+            val success = manager.restoreTorrent(
+                infoHash = infoHash,
+                name = name,
+                savePath = savePath,
+                totalSize = totalSize.toLong(),
+                downloadedBytes = downloadedBytes.toLong(),
+                status = status
+            )
+            promise.resolve(success)
+        } catch (e: Exception) {
+            promise.reject("RESTORE_ERROR", e.message, e)
+        }
+    }
+
     override fun onTorrentStateUpdated(jsonState: String) {
-        sendEvent("onTorrentStateUpdated", Arguments.createMap().apply {
-            putString("stateJson", jsonState)
-        })
+        try {
+            val obj = JSONObject(jsonState)
+            val map = Arguments.createMap().apply {
+                putString("stateJson", jsonState)
+                val h = obj.optString("infoHash", obj.optString("info_hash"))
+                putString("infoHash", h)
+                putDouble("downloadedBytes", obj.optDouble("downloadedBytes", obj.optDouble("downloaded_bytes", 0.0)))
+                putDouble("uploadedBytes", obj.optDouble("uploadedBytes", obj.optDouble("uploaded_bytes", 0.0)))
+                putInt("downloadRate", obj.optInt("downloadRate", obj.optInt("download_rate", 0)))
+                putInt("uploadRate", obj.optInt("uploadRate", obj.optInt("upload_rate", 0)))
+                putInt("numSeeds", obj.optInt("numSeeds", obj.optInt("num_seeds", 0)))
+                putInt("numPeers", obj.optInt("numPeers", obj.optInt("num_peers", 0)))
+                putInt("totalSeeds", obj.optInt("totalSeeds", obj.optInt("total_seeds", 0)))
+                putInt("totalPeers", obj.optInt("totalPeers", obj.optInt("total_peers", 0)))
+                if (obj.has("status")) {
+                    putString("status", obj.optString("status"))
+                }
+            }
+            sendEvent("onTorrentStateUpdated", map)
+        } catch (e: Exception) {
+            sendEvent("onTorrentStateUpdated", Arguments.createMap().apply {
+                putString("stateJson", jsonState)
+            })
+        }
     }
 
     override fun onTorrentFinished(infoHash: String) {
@@ -198,10 +245,23 @@ class TorrentEngineModule(private val reactContext: ReactApplicationContext) :
     }
 
     override fun onMetadataReceived(infoHash: String, metadataJson: String) {
-        sendEvent("onMetadataReceived", Arguments.createMap().apply {
-            putString("infoHash", infoHash)
-            putString("metadataJson", metadataJson)
-        })
+        try {
+            val obj = JSONObject(metadataJson)
+            val map = Arguments.createMap().apply {
+                putString("infoHash", infoHash)
+                putString("metadataJson", metadataJson)
+                putString("name", obj.optString("name"))
+                putDouble("totalSize", obj.optDouble("totalSize", obj.optDouble("total_size", 0.0)))
+                putInt("pieceLength", obj.optInt("pieceLength", obj.optInt("piece_length", 0)))
+                putInt("numPieces", obj.optInt("numPieces", obj.optInt("num_pieces", 0)))
+            }
+            sendEvent("onMetadataReceived", map)
+        } catch (e: Exception) {
+            sendEvent("onMetadataReceived", Arguments.createMap().apply {
+                putString("infoHash", infoHash)
+                putString("metadataJson", metadataJson)
+            })
+        }
     }
 
     override fun onTorrentError(infoHash: String, message: String) {

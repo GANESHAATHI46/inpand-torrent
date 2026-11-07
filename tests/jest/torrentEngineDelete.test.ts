@@ -27,7 +27,7 @@ const mockDb = {
   insertTorrent: jest.fn().mockResolvedValue(undefined),
   updateTorrentStatus: jest.fn().mockResolvedValue(undefined),
   loadSettings: jest.fn().mockResolvedValue({
-    defaultSavePath: '/storage/emulated/0/Download/TorrentFlow',
+    defaultSavePath: '/storage/emulated/0/Download/InpandTorrent',
   }),
 };
 
@@ -67,7 +67,7 @@ describe('TorrentEngine Deletion Unit Tests', () => {
       numPeers: 120,
       totalSeeds: 80,
       totalPeers: 200,
-      savePath: '/storage/emulated/0/Download/TorrentFlow',
+      savePath: '/storage/emulated/0/Download/InpandTorrent',
       addedDate: Date.now(),
       completedDate: null,
       pieceLength: 1048576,

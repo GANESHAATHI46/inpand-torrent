@@ -51,7 +51,7 @@ export default function DashboardScreen() {
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
         <View>
           <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
-            TORRENTFLOW MOBILE
+            INPAND TORRENT
           </Text>
           <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
             Dashboard

@@ -41,6 +41,15 @@ object TorrentEngineJni {
 
     external fun nativeRemoveTorrent(infoHash: String, deleteFiles: Boolean): Boolean
 
+    external fun nativeRestoreTorrent(
+        infoHash: String,
+        name: String,
+        savePath: String,
+        totalSize: Long,
+        downloadedBytes: Long,
+        status: String
+    ): Boolean
+
     external fun nativeSetSpeedLimits(downloadLimit: Int, uploadLimit: Int): Boolean
 
     external fun nativePollAlerts(): String

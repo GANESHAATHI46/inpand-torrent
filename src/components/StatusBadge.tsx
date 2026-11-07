@@ -24,6 +24,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
         return colors.danger;
       case 'checking':
       case 'downloading_metadata':
+      case 'connecting_peers':
+      case 'stalled':
         return colors.warning;
       default:
         return colors.textSecondary;

@@ -45,7 +45,13 @@ export default function DownloadsScreen() {
 
     // 2. Tab filter
     if (activeFilter === 'downloading') {
-      return t.status === 'downloading' || t.status === 'downloading_metadata' || t.status === 'checking';
+      return (
+        t.status === 'downloading' ||
+        t.status === 'downloading_metadata' ||
+        t.status === 'checking' ||
+        t.status === 'connecting_peers' ||
+        t.status === 'stalled'
+      );
     }
     if (activeFilter === 'completed') {
       return t.status === 'finished' || t.status === 'seeding';

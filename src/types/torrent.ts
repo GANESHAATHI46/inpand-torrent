@@ -1,7 +1,9 @@
 export type TorrentStatus =
   | 'checking'
   | 'downloading_metadata'
+  | 'connecting_peers'
   | 'downloading'
+  | 'stalled'
   | 'finished'
   | 'seeding'
   | 'allocating'

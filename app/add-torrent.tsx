@@ -30,7 +30,7 @@ export default function AddTorrentModal() {
   const { engine } = useTorrentSession();
 
   const [magnetInput, setMagnetInput] = useState('');
-  const [savePath, setSavePath] = useState('/storage/emulated/0/Download/TorrentFlow');
+  const [savePath, setSavePath] = useState('/storage/emulated/0/Download/InpandTorrent');
   const [loading, setLoading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedFileBase64, setSelectedFileBase64] = useState<string | null>(null);

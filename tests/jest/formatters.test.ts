@@ -47,6 +47,8 @@ describe('Formatters Unit Tests', () => {
       expect(formatStatusLabel('paused')).toBe('Paused');
       expect(formatStatusLabel('error')).toBe('Error');
       expect(formatStatusLabel('downloading_metadata')).toBe('Fetching Metadata');
+      expect(formatStatusLabel('connecting_peers')).toBe('Connecting to Peers');
+      expect(formatStatusLabel('stalled')).toBe('Stalled (No Peers)');
     });
   });
 });

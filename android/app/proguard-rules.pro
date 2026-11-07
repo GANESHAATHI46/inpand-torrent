@@ -17,6 +17,8 @@
 -keepclassmembers class * {
     native <methods>;
 }
+-keep class org.libtorrent4j.** { *; }
+-dontwarn org.libtorrent4j.**
 -keep class com.torrentflow.mobile.native.** { *; }
 -keepclassmembers class com.torrentflow.mobile.native.TorrentEngineJni { *; }
 -keep class com.torrentflow.mobile.bridge.** { *; }

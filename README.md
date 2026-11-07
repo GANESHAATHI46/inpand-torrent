@@ -1,4 +1,4 @@
-# TorrentFlow Mobile 🌊
+# Inpand Torrent 🌊
 
 > Production-oriented, full-featured Android BitTorrent client built with React Native / Expo, native C++ libtorrent 2.1.x, Python 3.11 application logic, and persistent Android Foreground Services.
 
@@ -11,7 +11,7 @@
 
 ## 📱 Application Overview
 
-**TorrentFlow Mobile** is an independent, native Android peer-to-peer torrent client designed specifically for high-throughput mobile downloading and seeding. It is completely isolated from TorrentFlow Desktop.
+**Inpand Torrent** is an independent, native Android peer-to-peer torrent client designed specifically for high-throughput mobile downloading and seeding.
 
 The application incorporates:
 - **Mobile Frontend**: Expo SDK 54, React Native 0.81, TypeScript, Expo Router (file-based navigation), and a custom Material 3 / Slate responsive design system (supporting dark and light modes).

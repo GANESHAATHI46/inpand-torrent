@@ -28,6 +28,7 @@ export class TorrentEngine {
   private db: DatabaseService;
   private activeTorrents: Map<string, TorrentItem> = new Map();
   private pendingDeletions: Set<string> = new Set();
+  private lastDbSaveTime: Map<string, number> = new Map();
   private listeners: Set<(torrents: TorrentItem[], stats: DashboardStats) => void> = new Set();
   private isInitialized = false;
 
@@ -61,6 +62,25 @@ export class TorrentEngine {
       // Inform native engine to restore session with fast resume data
       try {
         await TorrentEngineModule.initializeSession();
+        // Restore active torrents into native engine session
+        for (const t of persisted) {
+          if (t.status !== 'paused' && t.status !== 'error') {
+            try {
+              if (typeof TorrentEngineModule.restoreTorrent === 'function') {
+                await TorrentEngineModule.restoreTorrent(
+                  t.infoHash,
+                  t.name,
+                  t.savePath,
+                  t.totalSize,
+                  t.downloadedBytes,
+                  t.status
+                );
+              }
+            } catch (restErr) {
+              console.warn('Failed restoring torrent in native session:', t.infoHash, restErr);
+            }
+          }
+        }
       } catch (e) {
         console.warn('Native TorrentEngineModule initializeSession failed:', e);
       }
@@ -137,7 +157,13 @@ export class TorrentEngine {
       totalSize += t.totalSize;
       totalDownloaded += t.downloadedBytes;
 
-      if (t.status === 'downloading' || t.status === 'downloading_metadata' || t.status === 'checking') {
+      if (
+        t.status === 'downloading' ||
+        t.status === 'downloading_metadata' ||
+        t.status === 'checking' ||
+        t.status === 'connecting_peers' ||
+        t.status === 'stalled'
+      ) {
         active++;
       } else if (t.status === 'finished' || t.status === 'seeding') {
         completed++;
@@ -279,7 +305,7 @@ export class TorrentEngine {
         const item: TorrentItem = {
           infoHash,
           name: result.name || parsedMeta?.name || name,
-          status: 'downloading',
+          status: (result.status as TorrentStatus) || 'connecting_peers',
           totalSize: result.totalSize || parsedMeta?.totalSize || 0,
           downloadedBytes: 0,
           uploadedBytes: 0,
@@ -427,7 +453,12 @@ export class TorrentEngine {
 
   public async pauseAll(): Promise<void> {
     for (const t of this.activeTorrents.values()) {
-      if (t.status === 'downloading' || t.status === 'downloading_metadata') {
+      if (
+        t.status === 'downloading' ||
+        t.status === 'downloading_metadata' ||
+        t.status === 'connecting_peers' ||
+        t.status === 'stalled'
+      ) {
         await this.pauseTorrent(t.infoHash);
       }
     }
@@ -442,60 +473,104 @@ export class TorrentEngine {
   }
 
   private handleStateUpdate(payload: any): void {
-    const hash = (payload.infoHash || '').toLowerCase();
-    if (this.pendingDeletions.has(hash)) return;
+    let data = payload;
+    if (payload && payload.stateJson && typeof payload.stateJson === 'string') {
+      try {
+        const parsed = JSON.parse(payload.stateJson);
+        data = { ...parsed, ...payload };
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    const hash = (data.infoHash || data.info_hash || '').toLowerCase();
+    if (!hash || this.pendingDeletions.has(hash)) return;
 
     const t = this.activeTorrents.get(hash);
     if (!t) return;
 
-    t.downloadedBytes = payload.downloadedBytes ?? t.downloadedBytes;
-    t.uploadedBytes = payload.uploadedBytes ?? t.uploadedBytes;
-    t.downloadRate = payload.downloadRate ?? 0;
-    t.uploadRate = payload.uploadRate ?? 0;
-    t.numSeeds = payload.numSeeds ?? 0;
-    t.numPeers = payload.numPeers ?? 0;
-    t.totalSeeds = payload.totalSeeds ?? t.totalSeeds;
-    t.totalPeers = payload.totalPeers ?? t.totalPeers;
-    t.progress = t.totalSize > 0 ? Math.min(1, t.downloadedBytes / t.totalSize) : 0;
+    t.downloadedBytes = data.downloadedBytes ?? data.downloaded_bytes ?? t.downloadedBytes;
+    t.uploadedBytes = data.uploadedBytes ?? data.uploaded_bytes ?? t.uploadedBytes;
+    t.downloadRate = data.downloadRate ?? data.download_rate ?? 0;
+    t.uploadRate = data.uploadRate ?? data.upload_rate ?? 0;
+    t.numSeeds = data.numSeeds ?? data.num_seeds ?? 0;
+    t.numPeers = data.numPeers ?? data.num_peers ?? 0;
+    t.totalSeeds = data.totalSeeds ?? data.total_seeds ?? t.totalSeeds;
+    t.totalPeers = data.totalPeers ?? data.total_peers ?? t.totalPeers;
+    t.progress = t.totalSize > 0 ? Math.min(1, Math.max(0, t.downloadedBytes / t.totalSize)) : 0;
     t.eta = t.downloadRate > 0 && t.totalSize > t.downloadedBytes
       ? Math.ceil((t.totalSize - t.downloadedBytes) / t.downloadRate)
       : -1;
 
-    if (payload.piecesProgress) {
-      t.piecesProgress = payload.piecesProgress;
+    if (t.status !== 'paused' && t.status !== 'error') {
+      if (t.totalSize > 0 && t.downloadedBytes >= t.totalSize) {
+        t.status = 'finished';
+        t.downloadRate = 0;
+      } else if (data.status) {
+        t.status = data.status as TorrentStatus;
+      } else if (t.downloadRate > 0 || t.numPeers > 0) {
+        t.status = 'downloading';
+      } else if (t.status === 'downloading') {
+        t.status = 'connecting_peers';
+      }
+    }
+
+    if (data.piecesProgress) {
+      t.piecesProgress = data.piecesProgress;
+    }
+
+    // Persist progress to SQLite throttled every 3 seconds per torrent
+    const now = Date.now();
+    const lastSaved = this.lastDbSaveTime.get(hash) || 0;
+    if (now - lastSaved >= 3000) {
+      this.lastDbSaveTime.set(hash, now);
+      this.db.updateTorrentProgress(hash, t.downloadedBytes, t.uploadedBytes).catch(() => {});
     }
 
     this.notifyListeners();
   }
 
   private handleTorrentFinished(payload: any): void {
-    const hash = (payload.infoHash || '').toLowerCase();
-    if (this.pendingDeletions.has(hash)) return;
+    const hash = (payload.infoHash || payload.info_hash || '').toLowerCase();
+    if (!hash || this.pendingDeletions.has(hash)) return;
 
     const t = this.activeTorrents.get(hash);
     if (!t) return;
 
     t.status = 'finished';
+    t.downloadRate = 0;
     t.completedDate = Date.now();
-    this.db.updateTorrentStatus(hash, 'finished');
+    this.db.updateTorrentStatus(hash, 'finished').catch(() => {});
+    this.db.updateTorrentProgress(hash, t.downloadedBytes, t.uploadedBytes, t.completedDate).catch(() => {});
     this.notifyListeners();
   }
 
   private handleMetadataReceived(payload: any): void {
-    const hash = (payload.infoHash || '').toLowerCase();
-    if (this.pendingDeletions.has(hash)) return;
+    let data = payload;
+    if (payload && payload.metadataJson && typeof payload.metadataJson === 'string') {
+      try {
+        const parsed = JSON.parse(payload.metadataJson);
+        data = { ...parsed, ...payload };
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    const hash = (data.infoHash || data.info_hash || '').toLowerCase();
+    if (!hash || this.pendingDeletions.has(hash)) return;
 
     const t = this.activeTorrents.get(hash);
     if (!t) return;
 
-    t.name = payload.name || t.name;
-    t.totalSize = payload.totalSize || t.totalSize;
-    t.pieceLength = payload.pieceLength || t.pieceLength;
-    t.numPieces = payload.numPieces || t.numPieces;
-    t.status = 'downloading';
-    if (payload.files) t.files = payload.files;
-    if (payload.trackers) t.trackers = payload.trackers;
+    t.name = data.name || t.name;
+    t.totalSize = data.totalSize ?? data.total_size ?? t.totalSize;
+    t.pieceLength = data.pieceLength ?? data.piece_length ?? t.pieceLength;
+    t.numPieces = data.numPieces ?? data.num_pieces ?? t.numPieces;
+    t.status = 'connecting_peers';
+    if (data.files) t.files = data.files;
+    if (data.trackers) t.trackers = data.trackers;
 
+    this.db.updateTorrentStatus(hash, 'connecting_peers').catch(() => {});
     this.notifyListeners();
   }
 

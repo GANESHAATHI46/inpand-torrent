@@ -25,12 +25,12 @@ export class StorageService {
 
   public getDefaultDownloadDir(): string {
     if (Platform.OS === 'android') {
-      return '/storage/emulated/0/Download/TorrentFlow';
+      return '/storage/emulated/0/Download/InpandTorrent';
     }
     try {
       return `${Paths.document.uri}downloads`;
     } catch {
-      return '/storage/emulated/0/Download/TorrentFlow';
+      return '/storage/emulated/0/Download/InpandTorrent';
     }
   }
 }

@@ -1,5 +1,5 @@
 /**
- * TorrentFlow Mobile Color Palette
+ * Inpand Torrent Color Palette
  * Clean, professional dark and light themes inspired by modern native Android (Material 3 & Slate).
  */
 

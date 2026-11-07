@@ -172,7 +172,7 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeInitSession(
     std::lock_guard<std::mutex> lock(g_global_mutex);
 
     const char* save_path_c = env->GetStringUTFChars(save_path_j, nullptr);
-    std::string save_path = save_path_c ? save_path_c : "/storage/emulated/0/Download/TorrentFlow";
+    std::string save_path = save_path_c ? save_path_c : "/storage/emulated/0/Download/InpandTorrent";
     if (save_path_c) env->ReleaseStringUTFChars(save_path_j, save_path_c);
 
     g_session = std::make_unique<NativeTorrentSession>();
@@ -261,10 +261,13 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeAddMagnet(
     item.name = name;
     item.save_path = path;
     item.status = "downloading_metadata";
-    item.num_seeds = 12;
-    item.num_peers = 24;
-    item.download_rate = 1500000;
-    item.total_size = 500000000;
+    item.num_seeds = 0;
+    item.num_peers = 0;
+    item.download_rate = 0;
+    item.upload_rate = 0;
+    item.total_size = 0;
+    item.downloaded_bytes = 0;
+    item.uploaded_bytes = 0;
     g_session->torrents[info_hash] = item;
 
 #ifdef HAVE_LIBTORRENT
@@ -402,13 +405,16 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeAddTorrentFile(
     item.info_hash = info_hash;
     item.name = name;
     item.save_path = path;
-    item.status = "downloading";
+    item.status = "connecting_peers";
     item.total_size = total_size;
+    item.downloaded_bytes = 0;
+    item.uploaded_bytes = 0;
     item.piece_length = piece_length;
     item.num_pieces = num_pieces;
-    item.num_seeds = 18;
-    item.num_peers = 35;
-    item.download_rate = 2400000;
+    item.num_seeds = 0;
+    item.num_peers = 0;
+    item.download_rate = 0;
+    item.upload_rate = 0;
     g_session->torrents[info_hash] = item;
 
 #ifdef HAVE_LIBTORRENT
@@ -437,7 +443,7 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeAddTorrentFile(
          << "\"totalSize\":" << total_size << ","
          << "\"pieceLength\":" << piece_length << ","
          << "\"numPieces\":" << num_pieces << ","
-         << "\"status\":\"downloading\","
+         << "\"status\":\"connecting_peers\","
          << "\"savePath\":\"" << path << "\""
          << "}";
 
@@ -488,8 +494,14 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeResumeTorrent(
         std::transform(hash.begin(), hash.end(), hash.begin(), ::tolower);
         std::lock_guard<std::mutex> lock(g_session->session_mutex);
         if (g_session->torrents.find(hash) != g_session->torrents.end()) {
-            g_session->torrents[hash].status = "downloading";
-            g_session->torrents[hash].download_rate = 2000000;
+            auto& item = g_session->torrents[hash];
+            if (item.total_size > 0 && item.downloaded_bytes >= item.total_size) {
+                item.status = "seeding";
+            } else {
+                item.status = "connecting_peers";
+            }
+            item.download_rate = 0;
+            item.upload_rate = 0;
         }
 #ifdef HAVE_LIBTORRENT
         if (g_session->handles.find(hash) != g_session->handles.end()) {
@@ -529,6 +541,81 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeRemoveTorrent(
 #endif
         env->ReleaseStringUTFChars(info_hash_j, hash_c);
     }
+    return JNI_TRUE;
+}
+
+/**
+ * Restore a persisted torrent into native session on app start
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_torrentflow_mobile_native_TorrentEngineJni_nativeRestoreTorrent(
+    JNIEnv* env,
+    jobject /* this */,
+    jstring info_hash_j,
+    jstring name_j,
+    jstring save_path_j,
+    jlong total_size,
+    jlong downloaded_bytes,
+    jstring status_j
+) {
+    if (!g_session || !g_session->is_initialized) {
+        LOGE("Cannot restore torrent: native session not initialized");
+        return JNI_FALSE;
+    }
+
+    const char* hash_c = env->GetStringUTFChars(info_hash_j, nullptr);
+    const char* name_c = env->GetStringUTFChars(name_j, nullptr);
+    const char* path_c = env->GetStringUTFChars(save_path_j, nullptr);
+    const char* status_c = env->GetStringUTFChars(status_j, nullptr);
+
+    std::string hash = hash_c ? hash_c : "";
+    std::string name = name_c ? name_c : "";
+    std::string path = path_c ? path_c : g_session->default_save_path;
+    std::string status = status_c ? status_c : "connecting_peers";
+
+    if (hash_c) env->ReleaseStringUTFChars(info_hash_j, hash_c);
+    if (name_c) env->ReleaseStringUTFChars(name_j, name_c);
+    if (path_c) env->ReleaseStringUTFChars(save_path_j, path_c);
+    if (status_c) env->ReleaseStringUTFChars(status_j, status_c);
+
+    std::transform(hash.begin(), hash.end(), hash.begin(), ::tolower);
+    if (hash.empty()) return JNI_FALSE;
+
+    LOGI("Native restoreTorrent: %s ('%s') [%s] %lld / %lld",
+         hash.c_str(), name.c_str(), status.c_str(), (long long)downloaded_bytes, (long long)total_size);
+
+    std::lock_guard<std::mutex> lock(g_session->session_mutex);
+    NativeTorrentItem item;
+    item.info_hash = hash;
+    item.name = name;
+    item.save_path = path;
+    item.total_size = total_size;
+    item.downloaded_bytes = downloaded_bytes;
+    item.uploaded_bytes = 0;
+    item.download_rate = 0;
+    item.upload_rate = 0;
+    item.num_seeds = 0;
+    item.num_peers = 0;
+    item.status = status;
+
+    g_session->torrents[hash] = item;
+
+#ifdef HAVE_LIBTORRENT
+    if (g_session->session_ptr && g_session->handles.find(hash) == g_session->handles.end()) {
+        lt::error_code ec;
+        std::string magnet_uri = "magnet:?xt=urn:btih:" + hash + "&dn=" + name;
+        lt::add_torrent_params atp = lt::parse_magnet_uri(magnet_uri, ec);
+        if (!ec) {
+            atp.save_path = path;
+            lt::torrent_handle h = g_session->session_ptr->add_torrent(atp);
+            if (status == "paused") {
+                h.pause();
+            }
+            g_session->handles[hash] = h;
+        }
+    }
+#endif
+
     return JNI_TRUE;
 }
 
@@ -578,6 +665,7 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativePollAlerts(
 
 #ifdef HAVE_LIBTORRENT
     if (g_session->session_ptr) {
+        g_session->session_ptr->post_torrent_updates();
         std::vector<lt::alert*> alerts;
         g_session->session_ptr->pop_alerts(&alerts);
         for (auto* a : alerts) {
@@ -586,63 +674,143 @@ Java_com_torrentflow_mobile_native_TorrentEngineJni_nativePollAlerts(
                     if (!first) json << ",";
                     first = false;
                     std::string h = lt::aux::to_hex(st.info_hashes.get_best());
+                    std::transform(h.begin(), h.end(), h.begin(), ::tolower);
+
+                    std::string mapped_status = "downloading";
+                    if (st.state == lt::torrent_status::checking_files || st.state == lt::torrent_status::checking_resume_data) {
+                        mapped_status = "checking";
+                    } else if (st.state == lt::torrent_status::downloading_metadata) {
+                        mapped_status = "downloading_metadata";
+                    } else if (st.state == lt::torrent_status::seeding || st.state == lt::torrent_status::finished) {
+                        mapped_status = "seeding";
+                    } else if (st.state == lt::torrent_status::downloading) {
+                        if (st.num_peers == 0 && st.download_payload_rate == 0) {
+                            mapped_status = "connecting_peers";
+                        } else {
+                            mapped_status = "downloading";
+                        }
+                    }
+
                     json << "{"
                          << "\"type\":\"state_update\","
                          << "\"info_hash\":\"" << h << "\","
+                         << "\"infoHash\":\"" << h << "\","
+                         << "\"status\":\"" << mapped_status << "\","
                          << "\"downloadedBytes\":" << st.total_done << ","
                          << "\"uploadedBytes\":" << st.total_upload << ","
                          << "\"downloadRate\":" << st.download_payload_rate << ","
                          << "\"uploadRate\":" << st.upload_payload_rate << ","
                          << "\"numSeeds\":" << st.num_seeds << ","
-                         << "\"numPeers\":" << st.num_peers
+                         << "\"numPeers\":" << st.num_peers << ","
+                         << "\"totalSeeds\":" << st.num_complete << ","
+                         << "\"totalPeers\":" << st.num_incomplete
                          << "}";
                 }
+            } else if (auto* ma = lt::alert_cast<lt::metadata_received_alert>(a)) {
+                auto h = ma->handle;
+                if (h.is_valid()) {
+                    auto ti = h.torrent_file();
+                    if (ti) {
+                        std::string hex_hash = lt::aux::to_hex(h.info_hashes().get_best());
+                        std::transform(hex_hash.begin(), hex_hash.end(), hex_hash.begin(), ::tolower);
+                        if (!first) json << ",";
+                        first = false;
+                        json << "{"
+                             << "\"type\":\"metadata_received\","
+                             << "\"info_hash\":\"" << hex_hash << "\","
+                             << "\"infoHash\":\"" << hex_hash << "\","
+                             << "\"name\":\"" << ti->name() << "\","
+                             << "\"totalSize\":" << ti->total_size() << ","
+                             << "\"pieceLength\":" << ti->piece_length() << ","
+                             << "\"numPieces\":" << ti->num_pieces()
+                             << "}";
+                    }
+                }
+            } else if (auto* fa = lt::alert_cast<lt::torrent_finished_alert>(a)) {
+                std::string hex_hash = lt::aux::to_hex(fa->handle.info_hashes().get_best());
+                std::transform(hex_hash.begin(), hex_hash.end(), hex_hash.begin(), ::tolower);
+                if (!first) json << ",";
+                first = false;
+                json << "{"
+                     << "\"type\":\"torrent_finished\","
+                     << "\"info_hash\":\"" << hex_hash << "\","
+                     << "\"infoHash\":\"" << hex_hash << "\""
+                     << "}";
+            } else if (auto* ea = lt::alert_cast<lt::torrent_error_alert>(a)) {
+                std::string hex_hash = lt::aux::to_hex(ea->handle.info_hashes().get_best());
+                std::transform(hex_hash.begin(), hex_hash.end(), hex_hash.begin(), ::tolower);
+                if (!first) json << ",";
+                first = false;
+                json << "{"
+                     << "\"type\":\"torrent_error\","
+                     << "\"info_hash\":\"" << hex_hash << "\","
+                     << "\"infoHash\":\"" << hex_hash << "\","
+                     << "\"error_message\":\"" << ea->error.message() << "\""
+                     << "}";
             }
         }
     }
 #endif
 
-    // Advance dynamic progress for all active torrents
+    // Emit live state updates for all tracked session torrents
     for (auto& pair : g_session->torrents) {
         auto& t = pair.second;
-        if (t.status == "downloading") {
-            int step = std::max(500000, t.download_rate / 2);
-            t.downloaded_bytes = std::min(t.total_size, t.downloaded_bytes + step);
-            if (t.downloaded_bytes >= t.total_size && t.total_size > 0) {
-                t.status = "finished";
-                t.download_rate = 0;
-            }
-
+        if (t.status == "downloading" || t.status == "connecting_peers") {
             if (!first) json << ",";
             first = false;
             json << "{"
                  << "\"type\":\"state_update\","
                  << "\"info_hash\":\"" << t.info_hash << "\","
+                 << "\"infoHash\":\"" << t.info_hash << "\","
+                 << "\"status\":\"" << t.status << "\","
                  << "\"downloadedBytes\":" << t.downloaded_bytes << ","
                  << "\"uploadedBytes\":" << t.uploaded_bytes << ","
                  << "\"downloadRate\":" << t.download_rate << ","
                  << "\"uploadRate\":" << t.upload_rate << ","
                  << "\"numSeeds\":" << t.num_seeds << ","
                  << "\"numPeers\":" << t.num_peers << ","
-                 << "\"totalSeeds\":" << (t.num_seeds + 5) << ","
-                 << "\"totalPeers\":" << (t.num_peers + 15)
+                 << "\"totalSeeds\":" << t.total_seeds << ","
+                 << "\"totalPeers\":" << t.total_peers
                  << "}";
 
-            if (t.status == "finished") {
-                json << ",{\"type\":\"torrent_finished\",\"info_hash\":\"" << t.info_hash << "\"}";
+            if (t.downloaded_bytes >= t.total_size && t.total_size > 0 && t.status != "finished") {
+                t.status = "finished";
+                t.download_rate = 0;
+                json << ",{\"type\":\"torrent_finished\",\"info_hash\":\"" << t.info_hash << "\",\"infoHash\":\"" << t.info_hash << "\"}";
             }
-        } else if (t.status == "downloading_metadata") {
-            // Transition to downloading once metadata has arrived
-            t.status = "downloading";
+        } else if (t.status == "finished" || t.status == "seeding") {
             if (!first) json << ",";
             first = false;
             json << "{"
-                 << "\"type\":\"metadata_received\","
+                 << "\"type\":\"state_update\","
                  << "\"info_hash\":\"" << t.info_hash << "\","
-                 << "\"name\":\"" << t.name << "\","
-                 << "\"totalSize\":" << t.total_size << ","
-                 << "\"pieceLength\":" << t.piece_length << ","
-                 << "\"numPieces\":" << t.num_pieces
+                 << "\"infoHash\":\"" << t.info_hash << "\","
+                 << "\"status\":\"seeding\","
+                 << "\"downloadedBytes\":" << t.downloaded_bytes << ","
+                 << "\"uploadedBytes\":" << t.uploaded_bytes << ","
+                 << "\"downloadRate\":0,"
+                 << "\"uploadRate\":" << t.upload_rate << ","
+                 << "\"numSeeds\":" << t.num_seeds << ","
+                 << "\"numPeers\":" << t.num_peers << ","
+                 << "\"totalSeeds\":" << t.total_seeds << ","
+                 << "\"totalPeers\":" << t.total_peers
+                 << "}";
+        } else if (t.status == "downloading_metadata") {
+            if (!first) json << ",";
+            first = false;
+            json << "{"
+                 << "\"type\":\"state_update\","
+                 << "\"info_hash\":\"" << t.info_hash << "\","
+                 << "\"infoHash\":\"" << t.info_hash << "\","
+                 << "\"status\":\"downloading_metadata\","
+                 << "\"downloadedBytes\":0,"
+                 << "\"uploadedBytes\":0,"
+                 << "\"downloadRate\":0,"
+                 << "\"uploadRate\":0,"
+                 << "\"numSeeds\":0,"
+                 << "\"numPeers\":0,"
+                 << "\"totalSeeds\":0,"
+                 << "\"totalPeers\":0"
                  << "}";
         }
     }

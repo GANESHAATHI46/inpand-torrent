@@ -282,7 +282,7 @@ export class DatabaseService {
       wifiOnly: false,
       mobileDataWarning: true,
       listenPort: 6881,
-      defaultSavePath: '/storage/emulated/0/Download/TorrentFlow',
+      defaultSavePath: '/storage/emulated/0/Download/InpandTorrent',
       darkMode: true,
     };
 
