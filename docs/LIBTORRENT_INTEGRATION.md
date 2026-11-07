@@ -66,8 +66,10 @@ The NDK build system links `torrentflow_native` as a shared library:
 cmake_minimum_required(VERSION 3.22.1)
 project(torrentflow_native CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# React Native 0.81+ New Architecture requires C++20
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/jni

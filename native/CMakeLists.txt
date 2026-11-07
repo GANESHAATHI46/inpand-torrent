@@ -3,8 +3,10 @@ cmake_minimum_required(VERSION 3.22.1)
 # Project name must be appmodules for React Native New Architecture compatibility
 project(appmodules CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# React Native 0.81+ New Architecture requires C++20 (e.g. RawProps.h concepts)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Android NDK configuration
 # Target ABIs: arm64-v8a, armeabi-v7a, x86_64
