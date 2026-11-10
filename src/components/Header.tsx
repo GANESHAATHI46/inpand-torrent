@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -21,6 +22,17 @@ export const Header: React.FC<HeaderProps> = ({
   onBack,
 }) => {
   const { colors, spacing, typography } = useTheme();
+  const router = useRouter();
+
+  const handleBackPress = () => {
+    if (onBack) {
+      onBack();
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
 
   return (
     <View
@@ -38,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
       <View style={styles.leftRow}>
         {showBack ? (
           <TouchableOpacity
-            onPress={onBack}
+            onPress={handleBackPress}
             activeOpacity={0.7}
             style={[styles.backBtn, { marginRight: spacing.sm }]}
           >

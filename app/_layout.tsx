@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -15,6 +16,29 @@ function RootNav() {
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
+
+    if (Platform.OS === 'android') {
+      const requestAndroidPermissions = async () => {
+        try {
+          if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
+            await PermissionsAndroid.requestMultiple([
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+              'android.permission.READ_MEDIA_VIDEO' as any,
+              'android.permission.READ_MEDIA_AUDIO' as any,
+              'android.permission.READ_MEDIA_IMAGES' as any,
+            ]);
+          } else {
+            await PermissionsAndroid.requestMultiple([
+              PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+              PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            ]);
+          }
+        } catch (e) {
+          // Ignore
+        }
+      };
+      requestAndroidPermissions();
+    }
   }, []);
 
   return (

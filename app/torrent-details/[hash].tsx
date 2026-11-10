@@ -56,10 +56,18 @@ export default function TorrentDetailsScreen() {
     );
   }
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/downloads');
+    }
+  };
+
   if (!torrent) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-        <Header title="Torrent Details" showBack onBack={() => router.back()} />
+        <Header title="Torrent Details" showBack onBack={handleBack} />
         <View style={styles.notFoundCenter}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.warning} />
           <Text style={[styles.notFoundTitle, { color: colors.text, marginTop: spacing.md }]}>
@@ -81,8 +89,12 @@ export default function TorrentDetailsScreen() {
   const isPaused = torrent.status === 'paused';
 
   const handleCopyHash = async () => {
-    await Clipboard.setStringAsync(torrent.infoHash);
-    Alert.alert('Copied', 'Info-hash copied to clipboard.');
+    try {
+      await Clipboard.setStringAsync(torrent.infoHash);
+      Alert.alert('Copied', 'Info-hash copied to clipboard.');
+    } catch (e) {
+      // Ignore clipboard write restrictions
+    }
   };
 
   const handleRemove = () => {
@@ -107,7 +119,7 @@ export default function TorrentDetailsScreen() {
         title={torrent.name}
         subtitle={formatBytes(torrent.totalSize)}
         showBack
-        onBack={() => router.back()}
+        onBack={handleBack}
         rightActionIcon="trash-outline"
         onRightAction={handleRemove}
       />

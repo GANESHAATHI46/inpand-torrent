@@ -84,6 +84,14 @@ export class TorrentEngine {
       } catch (e) {
         console.warn('Native TorrentEngineModule initializeSession failed:', e);
       }
+    } else {
+      // In Web / Local JS environment, automatically start mock timer if there are active torrents
+      const hasActive = persisted.some(
+        (t) => t.status === 'downloading' || t.status === 'downloading_metadata'
+      );
+      if (hasActive) {
+        this.startWebMockTimer();
+      }
     }
 
     this.isInitialized = true;
@@ -238,6 +246,9 @@ export class TorrentEngine {
       } catch (err) {
         console.warn('Native addMagnet call error:', err);
       }
+    } else {
+      // In Web / JS environment, immediately activate download simulation
+      this.startWebMockTimer();
     }
 
     this.notifyListeners();
@@ -251,11 +262,25 @@ export class TorrentEngine {
     this.webTimer = setInterval(() => {
       let hasActive = false;
       for (const t of this.activeTorrents.values()) {
-        if (t.status === 'downloading') {
+        if (t.status === 'downloading_metadata') {
           hasActive = true;
+          t.status = 'downloading';
+          t.totalSize = t.totalSize > 0 ? t.totalSize : 2147483648; // 2.0 GB default
+          t.downloadRate = 3200000;
+          t.uploadRate = 450000;
+          t.numSeeds = 42;
+          t.numPeers = 78;
+          t.totalSeeds = 60;
+          t.totalPeers = 120;
+          this.db.updateTorrentStatus(t.infoHash, 'downloading');
+        } else if (t.status === 'downloading') {
+          hasActive = true;
+          if (t.downloadRate === 0) {
+            t.downloadRate = 2800000 + Math.floor(Math.random() * 800000);
+          }
           const inc = Math.min(
             Math.max(0, t.totalSize - t.downloadedBytes),
-            t.downloadRate > 0 ? t.downloadRate : 1500000
+            t.downloadRate > 0 ? t.downloadRate : 2500000
           );
           t.downloadedBytes += inc;
           t.progress = t.totalSize > 0 ? Math.min(1, t.downloadedBytes / t.totalSize) : 0;
@@ -406,6 +431,8 @@ export class TorrentEngine {
       } catch (err) {
         console.warn('Native resume error:', err);
       }
+    } else {
+      this.startWebMockTimer();
     }
     this.notifyListeners();
   }

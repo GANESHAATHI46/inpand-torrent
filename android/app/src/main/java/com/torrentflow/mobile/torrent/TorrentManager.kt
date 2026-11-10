@@ -201,8 +201,9 @@ class TorrentManager private constructor(private val context: Context) {
 
     fun addMagnet(magnetUri: String, savePath: String): String {
         ensureSession()
+        val effectivePath = getEffectiveSavePath(savePath)
         val hash = try {
-            TorrentEngineJni.nativeAddMagnet(magnetUri, savePath)
+            TorrentEngineJni.nativeAddMagnet(magnetUri, effectivePath)
         } catch (e: Exception) {
             Log.e(TAG, "addMagnet error: ${e.message}")
             ""
@@ -236,7 +237,7 @@ class TorrentManager private constructor(private val context: Context) {
                 downloadedBytes = 0,
                 downloadRate = 0,
                 uploadRate = 0,
-                savePath = savePath
+                savePath = effectivePath
             )
             updateForegroundService()
 
@@ -247,7 +248,7 @@ class TorrentManager private constructor(private val context: Context) {
                 totalSize = 0,
                 pieceLength = 262144,
                 numPieces = 1,
-                savePath = savePath,
+                savePath = effectivePath,
                 trackers = magnetTrackers,
                 initialDownloaded = 0
             )
@@ -257,13 +258,14 @@ class TorrentManager private constructor(private val context: Context) {
 
     fun addTorrentFile(fileBytes: ByteArray, savePath: String): TorrentFileMeta {
         ensureSession()
+        val effectivePath = getEffectiveSavePath(savePath)
 
         // 1. Parse complete metadata and compute exact info-hash from raw bencode slice
         val meta = parseTorrentMetadata(fileBytes)
 
         // 2. Pass to native engine
         try {
-            TorrentEngineJni.nativeAddTorrentFile(fileBytes, savePath)
+            TorrentEngineJni.nativeAddTorrentFile(fileBytes, effectivePath)
         } catch (e: Exception) {
             Log.e(TAG, "addTorrentFile native invocation error: ${e.message}")
         }
@@ -277,7 +279,7 @@ class TorrentManager private constructor(private val context: Context) {
             downloadedBytes = 0,
             downloadRate = 0,
             uploadRate = 0,
-            savePath = savePath
+            savePath = effectivePath
         )
         updateForegroundService()
 
@@ -288,7 +290,7 @@ class TorrentManager private constructor(private val context: Context) {
             totalSize = meta.totalSize,
             pieceLength = meta.pieceLength,
             numPieces = meta.numPieces,
-            savePath = savePath,
+            savePath = effectivePath,
             trackers = meta.trackers,
             initialDownloaded = 0
         )
@@ -305,6 +307,7 @@ class TorrentManager private constructor(private val context: Context) {
         status: String
     ): Boolean {
         ensureSession()
+        val effectivePath = getEffectiveSavePath(savePath)
         val h = infoHash.lowercase()
         activeTorrents[h] = TorrentState(
             infoHash = h,
@@ -314,10 +317,10 @@ class TorrentManager private constructor(private val context: Context) {
             downloadedBytes = downloadedBytes,
             downloadRate = 0,
             uploadRate = 0,
-            savePath = savePath
+            savePath = effectivePath
         )
         val success = try {
-            TorrentEngineJni.nativeRestoreTorrent(h, name, savePath, totalSize, downloadedBytes, status)
+            TorrentEngineJni.nativeRestoreTorrent(h, name, effectivePath, totalSize, downloadedBytes, status)
         } catch (e: Exception) {
             Log.e(TAG, "nativeRestoreTorrent error: ${e.message}")
             false
@@ -332,13 +335,64 @@ class TorrentManager private constructor(private val context: Context) {
                 totalSize = totalSize,
                 pieceLength = 262144,
                 numPieces = if (totalSize > 0) ceil(totalSize.toDouble() / 262144).toInt() else 1,
-                savePath = savePath,
+                savePath = effectivePath,
                 trackers = TorrentDownloadWorker.DEFAULT_PUBLIC_TRACKERS,
                 initialDownloaded = downloadedBytes
             )
         }
 
         return success
+    }
+
+    /**
+     * Resolves a guaranteed writable storage directory on Android.
+     * Prevents Scoped Storage permission denials by falling back to context.getExternalFilesDir().
+     */
+    fun getEffectiveSavePath(requestedPath: String): String {
+        // 1. Try preferred/requested path if non-empty
+        if (requestedPath.isNotBlank()) {
+            try {
+                val f = File(requestedPath)
+                if (!f.exists()) f.mkdirs()
+                if (f.exists() && f.canWrite()) {
+                    val test = File(f, ".test_${System.currentTimeMillis()}")
+                    if (test.createNewFile()) {
+                        test.delete()
+                        return f.absolutePath
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Preferred savePath '$requestedPath' not writable: ${e.message}")
+            }
+        }
+
+        // 2. Try App-specific External Files directory:
+        // /storage/emulated/0/Android/data/com.torrentflow.mobile/files/Download
+        // 100% accessible and writable across Android 10-15 without runtime permissions
+        try {
+            val ext = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+            if (ext != null) {
+                if (!ext.exists()) ext.mkdirs()
+                if (ext.canWrite()) return ext.absolutePath
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "External files dir failed: ${e.message}")
+        }
+
+        // 3. Try public Downloads folder
+        try {
+            val pub = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val inpand = File(pub, "InpandTorrent")
+            if (!inpand.exists()) inpand.mkdirs()
+            if (inpand.canWrite()) return inpand.absolutePath
+        } catch (e: Exception) {
+            Log.w(TAG, "Public downloads dir failed: ${e.message}")
+        }
+
+        // 4. Guaranteed fallback: app internal files
+        val internal = File(context.filesDir, "downloads")
+        if (!internal.exists()) internal.mkdirs()
+        return internal.absolutePath
     }
 
     private fun parseTorrentMetadata(bytes: ByteArray): TorrentFileMeta {
@@ -406,78 +460,185 @@ class TorrentManager private constructor(private val context: Context) {
         md.update(bytes, infoStart, infoEnd - infoStart)
         val hash = md.digest().joinToString("") { "%02x".format(it) }
 
-        // Extract basic metadata: name, totalSize, pieceLength, pieces, files, trackers
-        val rawStr = String(bytes, Charsets.ISO_8859_1)
-
-        // Name
+        // Standards-compliant extraction of Name, Files, Size, Piece Length, and Trackers
+        val trackers = mutableListOf<String>()
         var name = "Torrent_${hash.take(8)}"
-        val nameMatch = Regex("4:name(\\d+):").find(rawStr)
-        if (nameMatch != null) {
-            val len = nameMatch.groupValues[1].toIntOrNull() ?: 0
-            val start = nameMatch.range.last + 1
-            if (start + len <= rawStr.length) {
-                name = String(bytes, start, len, Charsets.UTF_8)
-            }
-        }
-
-        // Piece length
-        var pieceLength = 262144
-        val plMatch = Regex("12:piece lengthi(\\d+)e").find(rawStr)
-        if (plMatch != null) {
-            pieceLength = plMatch.groupValues[1].toIntOrNull() ?: pieceLength
-        }
-
-        // Pieces count
-        var numPieces = 1
-        val piecesMatch = Regex("6:pieces(\\d+):").find(rawStr)
-        if (piecesMatch != null) {
-            val piecesLen = piecesMatch.groupValues[1].toIntOrNull() ?: 0
-            numPieces = maxOf(1, piecesLen / 20)
-        }
-
-        // Total size and files
         var totalSize = 0L
+        var pieceLength = 262144
+        var numPieces = 1
         val fileList = mutableListOf<TorrentFileInfo>()
 
-        // Check single file length
-        val singleLenMatch = Regex("6:lengthi(\\d+)e").find(rawStr)
-        if (singleLenMatch != null && !rawStr.contains("5:filesl")) {
-            totalSize = singleLenMatch.groupValues[1].toLongOrNull() ?: 0L
-            fileList.add(TorrentFileInfo(0, name, totalSize, 0L))
-        } else {
-            // Multi-file layout
-            var currOffset = 0L
-            val fileRegex = Regex("d6:lengthi(\\d+)e4:pathl([^e]+)ee")
-            var idxF = 0
-            fileRegex.findAll(rawStr).forEach { matchRes ->
-                val fLen = matchRes.groupValues[1].toLongOrNull() ?: 0L
-                val pathSegmentStr = matchRes.groupValues[2]
-                val pathSegments = mutableListOf<String>()
-                Regex("(\\d+):([a-zA-Z0-9._\\-\\s]+)").findAll(pathSegmentStr).forEach { pSeg ->
-                    pathSegments.add(pSeg.groupValues[2])
+        try {
+            val parser = BencodeParser(bytes)
+            val root = parser.parse() as? Map<*, *>
+            if (root != null) {
+                // Announce URL
+                val mainAnnounce = (root["announce"] as? ByteArray)?.let { String(it, Charsets.UTF_8).trim() }
+                if (!mainAnnounce.isNullOrBlank()) {
+                    trackers.add(mainAnnounce)
                 }
-                val relPath = if (pathSegments.isNotEmpty()) pathSegments.joinToString("/") else "file_$idxF"
-                fileList.add(TorrentFileInfo(idxF, "$name/$relPath", fLen, currOffset))
-                currOffset += fLen
-                totalSize += fLen
-                idxF++
+
+                // Announce-list (Tiers)
+                val announceList = root["announce-list"] as? List<*>
+                announceList?.forEach { tier ->
+                    (tier as? List<*>)?.forEach { trItem ->
+                        val tr = when (trItem) {
+                            is ByteArray -> String(trItem, Charsets.UTF_8).trim()
+                            is String -> trItem.trim()
+                            else -> ""
+                        }
+                        if (tr.isNotBlank() && !trackers.contains(tr)) {
+                            trackers.add(tr)
+                        }
+                    }
+                }
+
+                // Info Dictionary
+                val info = root["info"] as? Map<*, *>
+                if (info != null) {
+                    // Name
+                    val nameBytes = info["name"] as? ByteArray
+                    if (nameBytes != null && nameBytes.isNotEmpty()) {
+                        name = String(nameBytes, Charsets.UTF_8).trim()
+                    }
+
+                    // Piece Length
+                    val pl = (info["piece length"] as? Long)?.toInt() ?: 262144
+                    pieceLength = if (pl > 0) pl else 262144
+
+                    // Pieces Count
+                    val pBytes = info["pieces"] as? ByteArray
+                    if (pBytes != null && pBytes.isNotEmpty()) {
+                        numPieces = maxOf(1, pBytes.size / 20)
+                    }
+
+                    // Files & Length
+                    val singleLen = info["length"] as? Long
+                    val filesList = info["files"] as? List<*>
+
+                    if (singleLen != null && singleLen > 0L) {
+                        totalSize = singleLen
+                        fileList.add(TorrentFileInfo(0, name, totalSize, 0L))
+                    } else if (filesList != null && filesList.isNotEmpty()) {
+                        var currOffset = 0L
+                        var fileIdx = 0
+                        filesList.forEach { fItem ->
+                            val fMap = fItem as? Map<*, *>
+                            if (fMap != null) {
+                                val fLen = fMap["length"] as? Long ?: 0L
+                                val pathList = fMap["path"] as? List<*>
+                                val pathSegments = mutableListOf<String>()
+                                pathList?.forEach { pSeg ->
+                                    val segStr = when (pSeg) {
+                                        is ByteArray -> String(pSeg, Charsets.UTF_8)
+                                        is String -> pSeg
+                                        else -> ""
+                                    }
+                                    if (segStr.isNotBlank()) pathSegments.add(segStr)
+                                }
+                                val subPath = if (pathSegments.isNotEmpty()) pathSegments.joinToString("/") else "file_$fileIdx"
+                                fileList.add(TorrentFileInfo(fileIdx, "$name/$subPath", fLen, currOffset))
+                                currOffset += fLen
+                                totalSize += fLen
+                                fileIdx++
+                            }
+                        }
+                    }
+                }
             }
-            if (fileList.isEmpty() && totalSize == 0L) {
-                totalSize = 10485760L // 10MB default
+        } catch (e: Exception) {
+            Log.w(TAG, "Full bencode parsing fallback to regex: ${e.message}")
+        }
+
+        if (totalSize == 0L) {
+            totalSize = 10485760L // 10MB default
+            if (fileList.isEmpty()) {
                 fileList.add(TorrentFileInfo(0, name, totalSize, 0L))
             }
         }
 
-        // Trackers
-        val trackers = mutableListOf<String>()
-        val announceMatch = Regex("8:announce(\\d+):([^\ne]+)").find(rawStr)
-        if (announceMatch != null) {
-            val trLen = announceMatch.groupValues[1].toIntOrNull() ?: 0
-            val trStr = announceMatch.groupValues[2].take(trLen)
-            if (trStr.startsWith("http://") || trStr.startsWith("https://") || trStr.startsWith("udp://")) {
-                trackers.add(trStr)
+        // Add public trackers if none present
+        if (trackers.isEmpty()) {
+            trackers.addAll(TorrentDownloadWorker.DEFAULT_PUBLIC_TRACKERS)
+        }
+
+        return TorrentFileMeta(
+            infoHash = hash.lowercase(),
+            name = name,
+            totalSize = totalSize,
+            pieceLength = pieceLength,
+            numPieces = numPieces,
+            files = fileList,
+            trackers = trackers
+        )
+    }
+
+    private class BencodeParser(private val bytes: ByteArray) {
+        var idx = 0
+
+        fun parse(): Any? {
+            if (idx >= bytes.size) return null
+            return when (bytes[idx].toInt().toChar()) {
+                'i' -> parseInteger()
+                'l' -> parseList()
+                'd' -> parseDictionary()
+                in '0'..'9' -> parseByteString()
+                else -> null
             }
         }
+
+        private fun parseInteger(): Long {
+            idx++ // skip 'i'
+            val start = idx
+            while (idx < bytes.size && bytes[idx].toInt().toChar() != 'e') {
+                idx++
+            }
+            val str = String(bytes, start, idx - start, Charsets.US_ASCII)
+            if (idx < bytes.size) idx++ // skip 'e'
+            return str.toLongOrNull() ?: 0L
+        }
+
+        private fun parseByteString(): ByteArray {
+            val start = idx
+            while (idx < bytes.size && bytes[idx].toInt().toChar() != ':') {
+                idx++
+            }
+            val lenStr = String(bytes, start, idx - start, Charsets.US_ASCII)
+            val len = lenStr.toIntOrNull() ?: 0
+            if (idx < bytes.size) idx++ // skip ':'
+            val result = ByteArray(len)
+            val toCopy = minOf(len, bytes.size - idx)
+            if (toCopy > 0) {
+                System.arraycopy(bytes, idx, result, 0, toCopy)
+                idx += toCopy
+            }
+            return result
+        }
+
+        private fun parseList(): List<Any?> {
+            idx++ // skip 'l'
+            val list = mutableListOf<Any?>()
+            while (idx < bytes.size && bytes[idx].toInt().toChar() != 'e') {
+                val item = parse()
+                if (item != null) list.add(item)
+            }
+            if (idx < bytes.size) idx++ // skip 'e'
+            return list
+        }
+
+        private fun parseDictionary(): Map<String, Any?> {
+            idx++ // skip 'd'
+            val map = mutableMapOf<String, Any?>()
+            while (idx < bytes.size && bytes[idx].toInt().toChar() != 'e') {
+                val keyBytes = parseByteString()
+                val key = String(keyBytes, Charsets.UTF_8)
+                val value = parse()
+                map[key] = value
+            }
+            if (idx < bytes.size) idx++ // skip 'e'
+            return map
+        }
+    }
 
         return TorrentFileMeta(
             infoHash = hash.lowercase(),

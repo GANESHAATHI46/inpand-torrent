@@ -38,22 +38,48 @@ export default function AddTorrentModal() {
 
   useEffect(() => {
     // 1. Load default save path
-    DatabaseService.getInstance().loadSettings().then((s) => {
-      if (s.defaultSavePath) setSavePath(s.defaultSavePath);
-    });
+    DatabaseService.getInstance()
+      .loadSettings()
+      .then((s) => {
+        if (s.defaultSavePath) setSavePath(s.defaultSavePath);
+      })
+      .catch(() => {});
 
-    // 2. Check clipboard for magnet link on open
-    Clipboard.getStringAsync().then((clip) => {
-      if (clip && clip.trim().toLowerCase().startsWith('magnet:?')) {
-        setMagnetInput(clip.trim());
-      }
-    });
+    // 2. Check clipboard for magnet link on open (only on native platforms where permitted)
+    if (Platform.OS !== 'web') {
+      Clipboard.getStringAsync()
+        .then((clip) => {
+          if (clip && clip.trim().toLowerCase().startsWith('magnet:?')) {
+            setMagnetInput(clip.trim());
+          }
+        })
+        .catch(() => {
+          // Gracefully ignore permission or availability errors on mount
+        });
+    }
   }, []);
 
   const handlePasteClipboard = async () => {
-    const text = await Clipboard.getStringAsync();
-    if (text) {
-      setMagnetInput(text.trim());
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text) {
+        setMagnetInput(text.trim());
+      }
+    } catch (e: any) {
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Clipboard Permission',
+          'Clipboard access was blocked by the browser or sandbox. You can paste your magnet link directly into the text box using Ctrl+V or Cmd+V.'
+        );
+      }
+    }
+  };
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
     }
   };
 
@@ -171,7 +197,7 @@ export default function AddTorrentModal() {
         title="Add Torrent"
         subtitle="Download via Magnet URI or .torrent file"
         showBack
-        onBack={() => router.back()}
+        onBack={handleBack}
       />
 
       <ScrollView contentContainerStyle={[styles.content, { padding: spacing.lg }]}>

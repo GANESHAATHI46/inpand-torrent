@@ -55,7 +55,11 @@ class TorrentDownloadWorker(
             "udp://open.stealth.si:80/announce",
             "udp://tracker.torrent.eu.org:451/announce",
             "udp://tracker.bittor.pw:1337/announce",
-            "udp://explodie.org:6969/announce"
+            "udp://explodie.org:6969/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "http://tracker.openbittorrent.com:80/announce",
+            "udp://tracker.cyberia.is:6969/announce",
+            "udp://p4p.arenabg.com:1337/announce"
         )
     }
 
@@ -107,14 +111,23 @@ class TorrentDownloadWorker(
         downloadedBytes.set(initialDownloadedBytes)
 
         try {
-            val baseDir = File(savePath)
+            var baseDir = File(savePath)
             if (!baseDir.exists()) baseDir.mkdirs()
 
             val safeName = name.replace(Regex("[/\\\\:*?\"<>|]"), "_").trim().ifEmpty { "download_$infoHash" }
-            val target = File(baseDir, safeName)
-            destinationFile = target
+            var target = File(baseDir, safeName)
 
-            val raf = RandomAccessFile(target, "rw")
+            var raf: RandomAccessFile? = null
+            try {
+                raf = RandomAccessFile(target, "rw")
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct RandomAccessFile failed on $target, trying fallback location", e)
+                val fallbackDir = File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
+                if (!fallbackDir.exists()) fallbackDir.mkdirs()
+                target = File(fallbackDir, safeName)
+                raf = RandomAccessFile(target, "rw")
+            }
+            destinationFile = target
             if (target.length() < totalSize && totalSize > 0) {
                 try {
                     raf.setLength(totalSize)
@@ -125,8 +138,6 @@ class TorrentDownloadWorker(
             randomAccessFile = raf
         } catch (e: Exception) {
             Log.e(TAG, "Failed creating destination file: ${e.message}", e)
-            callback.onError("Cannot initialize storage file: ${e.message}")
-            return
         }
 
         // 1. Start tracker announce thread
@@ -258,28 +269,31 @@ class TorrentDownloadWorker(
             if (!allTrackers.contains(defTr)) allTrackers.add(defTr)
         }
 
-        var loopCount = 0
         while (isRunning.get() && !isPaused.get()) {
+            val latch = CountDownLatch(allTrackers.size)
             for (trUrl in allTrackers) {
                 if (!isRunning.get() || isPaused.get()) break
-                try {
-                    when {
-                        trUrl.startsWith("http://", ignoreCase = true) || trUrl.startsWith("https://", ignoreCase = true) -> {
-                            announceHttpTracker(trUrl)
+                executor.submit {
+                    try {
+                        when {
+                            trUrl.startsWith("http://", ignoreCase = true) || trUrl.startsWith("https://", ignoreCase = true) -> {
+                                announceHttpTracker(trUrl)
+                            }
+                            trUrl.startsWith("udp://", ignoreCase = true) -> {
+                                announceUdpTracker(trUrl)
+                            }
                         }
-                        trUrl.startsWith("udp://", ignoreCase = true) -> {
-                            announceUdpTracker(trUrl)
-                        }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Tracker announce failed for $trUrl: ${e.message}")
+                    } finally {
+                        latch.countDown()
                     }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Tracker announce failed for $trUrl: ${e.message}")
                 }
             }
 
-            loopCount++
-            // Sleep 30 seconds before re-announcing
             try {
-                Thread.sleep(30000)
+                latch.await(8, TimeUnit.SECONDS)
+                Thread.sleep(25000)
             } catch (e: InterruptedException) {
                 break
             }
@@ -440,17 +454,15 @@ class TorrentDownloadWorker(
 
     private fun runPeerSwarmConnectorLoop() {
         while (isRunning.get() && !isPaused.get()) {
-            if (connectedPeerSockets.size < MAX_ACTIVE_PEERS && discoveredPeers.isNotEmpty()) {
-                val peerStr = discoveredPeers.firstOrNull()
-                if (peerStr != null) {
-                    discoveredPeers.remove(peerStr)
-                    if (!connectedPeerSockets.containsKey(peerStr)) {
-                        executor.submit { connectAndDownloadFromPeer(peerStr) }
-                    }
+            while (connectedPeerSockets.size < MAX_ACTIVE_PEERS && discoveredPeers.isNotEmpty()) {
+                val peerStr = discoveredPeers.firstOrNull() ?: break
+                discoveredPeers.remove(peerStr)
+                if (!connectedPeerSockets.containsKey(peerStr)) {
+                    executor.submit { connectAndDownloadFromPeer(peerStr) }
                 }
             }
             try {
-                Thread.sleep(500)
+                Thread.sleep(800)
             } catch (e: InterruptedException) {
                 break
             }

@@ -43,12 +43,20 @@ export default function PrivacyScreen() {
     },
   ];
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/settings');
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       {/* Top Header */}
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
