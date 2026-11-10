@@ -170,19 +170,16 @@ export default function AddTorrentModal() {
     setLoading(true);
     try {
       if (selectedFileBase64 && selectedFileName) {
-        const torrent = await engine.addTorrentFile(selectedFileBase64, selectedFileName, savePath);
-        Alert.alert(
-          'Download Started',
-          `"${torrent.name}" has been queued for download.`,
-          [{ text: 'OK', onPress: () => router.replace(`/torrent-details/${torrent.infoHash}`) }]
-        );
+        await engine.addTorrentFile(selectedFileBase64, selectedFileName, savePath);
       } else {
-        const torrent = await engine.addMagnet(magnetInput.trim(), savePath);
-        Alert.alert(
-          'Download Started',
-          `"${torrent.name}" has been queued for download.`,
-          [{ text: 'OK', onPress: () => router.replace(`/torrent-details/${torrent.infoHash}`) }]
-        );
+        await engine.addMagnet(magnetInput.trim(), savePath);
+      }
+
+      // Automatically return to Home screen (Dashboard) so download is visible immediately
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)');
       }
     } catch (err: any) {
       Alert.alert('Error Adding Torrent', err?.message || 'Could not add torrent.');
@@ -198,6 +195,7 @@ export default function AddTorrentModal() {
         subtitle="Download via Magnet URI or .torrent file"
         showBack
         onBack={handleBack}
+        showLogo
       />
 
       <ScrollView contentContainerStyle={[styles.content, { padding: spacing.lg }]}>

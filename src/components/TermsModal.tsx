@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -149,9 +150,11 @@ export const TermsModal: React.FC<TermsModalProps> = ({
           ]}
         >
           <View style={styles.headerLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-              <Ionicons name="shield-checkmark" size={24} color={colors.primaryLight} />
-            </View>
+            <Image
+              source={require('../../assets/logo-transparent.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <View style={styles.headerTitles}>
               <Text style={[styles.appName, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
                 INPAND TORRENT
@@ -297,12 +300,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  iconContainer: {
+  logo: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: 12,
   },
   headerTitles: {

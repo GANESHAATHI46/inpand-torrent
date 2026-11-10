@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
+  showLogo?: boolean;
   title: string;
   description: string;
   actionTitle?: string;
@@ -14,6 +15,7 @@ interface EmptyStateProps {
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
   icon = 'cloud-download-outline',
+  showLogo = false,
   title,
   description,
   actionTitle,
@@ -23,18 +25,39 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   return (
     <View style={styles.container}>
-      <View
-        style={[
-          styles.iconCircle,
-          {
-            backgroundColor: colors.surfaceVariant,
-            borderRadius: spacing.borderRadiusFull,
-            padding: spacing.xl,
-          },
-        ]}
-      >
-        <Ionicons name={icon} size={48} color={colors.primaryLight} />
-      </View>
+      {showLogo ? (
+        <View
+          style={[
+            styles.iconCircle,
+            {
+              backgroundColor: colors.surfaceVariant,
+              borderRadius: spacing.borderRadiusFull,
+              padding: spacing.lg,
+              width: 84,
+              height: 84,
+            },
+          ]}
+        >
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={{ width: 52, height: 52 }}
+            resizeMode="contain"
+          />
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.iconCircle,
+            {
+              backgroundColor: colors.surfaceVariant,
+              borderRadius: spacing.borderRadiusFull,
+              padding: spacing.xl,
+            },
+          ]}
+        >
+          <Ionicons name={icon} size={48} color={colors.primaryLight} />
+        </View>
+      )}
       <Text
         style={[
           styles.title,

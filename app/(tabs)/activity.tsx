@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -38,9 +38,21 @@ export default function ActivityScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
-          Network Activity
-        </Text>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
+              INPAND TORRENT
+            </Text>
+            <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
+              Network Activity
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -185,6 +197,19 @@ const styles = StyleSheet.create({
   header: {
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
+  },
+  brand: {
+    fontWeight: '700',
+    letterSpacing: 1.2,
   },
   headerTitle: {
     fontWeight: '800',

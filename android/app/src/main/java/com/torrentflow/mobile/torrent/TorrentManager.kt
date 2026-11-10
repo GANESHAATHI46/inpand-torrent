@@ -640,17 +640,6 @@ class TorrentManager private constructor(private val context: Context) {
         }
     }
 
-        return TorrentFileMeta(
-            infoHash = hash.lowercase(),
-            name = name,
-            totalSize = totalSize,
-            pieceLength = pieceLength,
-            numPieces = numPieces,
-            files = fileList,
-            trackers = trackers
-        )
-    }
-
     fun pauseTorrent(infoHash: String): Boolean {
         val h = infoHash.lowercase()
         workers[h]?.pause()

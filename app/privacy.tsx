@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,9 +63,16 @@ export default function PrivacyScreen() {
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleCol}>
-          <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
-            INPAND TORRENT
-          </Text>
+          <View style={styles.brandBadgeRow}>
+            <Image
+              source={require('../assets/logo-transparent.png')}
+              style={styles.logoTiny}
+              resizeMode="contain"
+            />
+            <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
+              INPAND TORRENT
+            </Text>
+          </View>
           <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.title }]}>
             Privacy Policy
           </Text>
@@ -120,6 +127,15 @@ const styles = StyleSheet.create({
   },
   headerTitleCol: {
     alignItems: 'center',
+  },
+  brandBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  logoTiny: {
+    width: 18,
+    height: 18,
   },
   brand: {
     fontWeight: '700',

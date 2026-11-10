@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -160,16 +161,28 @@ export default function DownloadsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
-          Downloads
-        </Text>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
+              INPAND TORRENT
+            </Text>
+            <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
+              Downloads
+            </Text>
+          </View>
+        </View>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: colors.primary, borderRadius: spacing.borderRadiusMd }]}
           onPress={() => router.push('/add-torrent')}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={22} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>Add Torrent</Text>
+          <Text style={styles.addBtnText}>Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -233,6 +246,7 @@ export default function DownloadsScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="cloud-download-outline"
+            showLogo={!searchQuery && activeFilter === 'all'}
             title="No Torrents Found"
             description={
               searchQuery
@@ -272,6 +286,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
+  },
+  brand: {
+    fontWeight: '700',
+    letterSpacing: 1.2,
   },
   headerTitle: {
     fontWeight: '800',

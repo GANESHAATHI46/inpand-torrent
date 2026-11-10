@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -11,6 +11,7 @@ interface HeaderProps {
   onRightAction?: () => void;
   showBack?: boolean;
   onBack?: () => void;
+  showLogo?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRightAction,
   showBack = false,
   onBack,
+  showLogo = false,
 }) => {
   const { colors, spacing, typography } = useTheme();
   const router = useRouter();
@@ -56,6 +58,13 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
+        ) : null}
+        {showLogo ? (
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
         ) : null}
         <View>
           <Text
@@ -119,6 +128,11 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     padding: 4,
+  },
+  headerLogo: {
+    width: 32,
+    height: 32,
+    marginRight: 10,
   },
   title: {
     fontWeight: '700',

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -79,9 +80,21 @@ export default function SettingsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
-          Settings
-        </Text>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
+              INPAND TORRENT
+            </Text>
+            <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
+              Settings
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -252,7 +265,7 @@ export default function SettingsScreen() {
         </Text>
         <Card style={{ marginTop: spacing.xs }}>
           <View style={styles.themeRow}>
-            {(['dark', 'light', 'system'] as const).map((m) => (
+            {(['system', 'dark', 'light'] as const).map((m) => (
               <TouchableOpacity
                 key={m}
                 onPress={() => setThemeMode(m)}
@@ -275,6 +288,13 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          <Text style={[styles.settingSub, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
+            {themeMode === 'system'
+              ? `System Default (currently ${isDark ? 'Dark' : 'Light'})`
+              : themeMode === 'dark'
+              ? 'Dark theme active'
+              : 'Light theme active'}
+          </Text>
         </Card>
 
         {/* Legal & Policies */}
@@ -323,12 +343,19 @@ export default function SettingsScreen() {
         <Text style={[styles.groupTitle, { color: colors.primaryLight, marginTop: spacing.lg }]}>
           ABOUT INPAND TORRENT
         </Text>
-        <Card style={{ marginTop: spacing.xs, marginBottom: spacing.xl }}>
-          <Text style={[styles.settingTitle, { color: colors.text }]}>Inpand Torrent</Text>
-          <Text style={[styles.settingSub, { color: colors.textSecondary, marginTop: 4 }]}>
+        <Card style={{ marginTop: spacing.xs, marginBottom: spacing.xl, alignItems: 'center', paddingVertical: spacing.lg }}>
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={{ width: 72, height: 72, marginBottom: spacing.sm }}
+            resizeMode="contain"
+          />
+          <Text style={[styles.settingTitle, { color: colors.text, fontSize: typography.sizes.h2, fontWeight: '800' }]}>
+            Inpand Torrent
+          </Text>
+          <Text style={[styles.settingSub, { color: colors.textSecondary, marginTop: 4, textAlign: 'center', maxWidth: 300 }]}>
             Production BitTorrent client for Android with libtorrent 2.1.x C++ engine and background foreground service.
           </Text>
-          <View style={{ marginTop: spacing.md }}>
+          <View style={{ width: '100%', marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md }}>
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Version: 1.0.0 (Release Build)</Text>
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Package: com.torrentflow.mobile</Text>
             <Text style={[styles.infoText, { color: colors.textMuted }]}>Target SDK: Android 14 / API 34</Text>
@@ -348,6 +375,19 @@ const styles = StyleSheet.create({
   header: {
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
+  },
+  brand: {
+    fontWeight: '700',
+    letterSpacing: 1.2,
   },
   headerTitle: {
     fontWeight: '800',

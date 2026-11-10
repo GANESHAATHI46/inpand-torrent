@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,13 +50,20 @@ export default function DashboardScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Top Header */}
       <View style={[styles.header, { borderBottomColor: colors.divider, paddingHorizontal: spacing.lg }]}>
-        <View>
-          <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
-            INPAND TORRENT
-          </Text>
-          <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
-            Dashboard
-          </Text>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../assets/logo-transparent.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={[styles.brand, { color: colors.primaryLight, fontSize: typography.sizes.caption }]}>
+              INPAND TORRENT
+            </Text>
+            <Text style={[styles.headerTitle, { color: colors.text, fontSize: typography.sizes.h2 }]}>
+              Dashboard
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: colors.primary, borderRadius: spacing.borderRadiusMd }]}
@@ -189,8 +197,12 @@ export default function DashboardScreen() {
 
         {recentTorrents.length === 0 ? (
           <Card style={{ marginTop: spacing.sm, alignItems: 'center', paddingVertical: spacing.xl }}>
-            <Ionicons name="cloud-download-outline" size={36} color={colors.textMuted} />
-            <Text style={[styles.noTorrentsTitle, { color: colors.text, marginTop: spacing.sm }]}>
+            <Image
+              source={require('../../assets/logo-transparent.png')}
+              style={{ width: 52, height: 52, marginBottom: spacing.sm, opacity: 0.85 }}
+              resizeMode="contain"
+            />
+            <Text style={[styles.noTorrentsTitle, { color: colors.text, marginTop: spacing.xs }]}>
               No active downloads
             </Text>
             <Text style={[styles.noTorrentsDesc, { color: colors.textSecondary }]}>
@@ -239,6 +251,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
   },
   brand: {
     fontWeight: '700',

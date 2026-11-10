@@ -1,4 +1,6 @@
-const { withAndroidManifest, withMainActivity } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
+const { withAndroidManifest, withMainActivity, withDangerousMod } = require('expo/config-plugins');
 
 function withTorrentEngine(config) {
   // 1. Android Manifest modifications
@@ -225,6 +227,27 @@ function withTorrentEngine(config) {
     config.modResults.contents = contents;
     return config;
   });
+
+  // 3. Ensure no duplicate launcher icon PNGs exist alongside WEBP icons in mipmap folders
+  config = withDangerousMod(config, [
+    'android',
+    async (config) => {
+      const resDir = path.join(config.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res');
+      const mipmaps = ['mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'mipmap-xxxhdpi'];
+      const pngNames = ['ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png'];
+      for (const m of mipmaps) {
+        for (const p of pngNames) {
+          const filePath = path.join(resDir, m, p);
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (_) {}
+          }
+        }
+      }
+      return config;
+    },
+  ]);
 
   return config;
 }
