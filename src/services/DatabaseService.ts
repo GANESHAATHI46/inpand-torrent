@@ -1,11 +1,12 @@
 import * as SQLite from 'expo-sqlite';
-import { TorrentItem, SessionSettings, TorrentStatus, FilePriority } from '../types/torrent';
+import { TorrentItem, SessionSettings, TorrentStatus, FilePriority, Tracker, TorrentFile } from '../types/torrent';
 
 const DB_NAME = 'torrentflow.db';
 
 export class DatabaseService {
   private static instance: DatabaseService;
   private db: SQLite.SQLiteDatabase | null = null;
+  private initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
   private constructor() {}
 
@@ -16,14 +17,40 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
+  /**
+   * Returns a ready-to-use SQLiteDatabase instance.
+   * Guarantees atomic, single-flight initialization even when called
+   * concurrently from multiple startup components or background tasks.
+   */
   public async getDb(): Promise<SQLite.SQLiteDatabase> {
-    if (!this.db) {
-      this.db = await SQLite.openDatabaseAsync(DB_NAME);
-      await this.initSchema(this.db);
+    if (this.db) {
+      return this.db;
     }
-    return this.db;
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = (async () => {
+      try {
+        // Open the database synchronously to avoid race conditions in the native bridge
+        const db = SQLite.openDatabaseSync(DB_NAME);
+        await this.initSchema(db);
+        this.db = db;
+        return db;
+      } catch (err) {
+        this.initPromise = null;
+        this.db = null;
+        throw err;
+      }
+    })();
+
+    return this.initPromise;
   }
 
+  /**
+   * Initializes schema and indexes atomically.
+   */
   private async initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(`
       PRAGMA foreign_keys = ON;
@@ -87,6 +114,13 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_torrent_files_hash ON torrent_files(info_hash);
       CREATE INDEX IF NOT EXISTS idx_trackers_hash ON trackers(info_hash);
     `);
+
+    try {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?);`,
+        [Date.now()]
+      );
+    } catch (_) {}
   }
 
   public async loadAllTorrents(): Promise<TorrentItem[]> {
@@ -133,13 +167,13 @@ export class DatabaseService {
         numPieces: Number(r.num_pieces) || 0,
         errorMessage: r.error_message || null,
         files: fileRows.map((f) => ({
-          index: f.file_index,
-          path: f.path,
-          size: Number(f.size),
-          offset: Number(f.offset),
+          index: Number(f.file_index) || 0,
+          path: f.path || '',
+          size: Number(f.size) || 0,
+          offset: Number(f.offset) || 0,
           downloadedBytes: Number(f.downloaded_bytes) || 0,
           priority: (Number(f.priority) || 4) as FilePriority,
-          progress: f.size > 0 ? (f.downloaded_bytes || 0) / f.size : 1,
+          progress: f.size > 0 ? (Number(f.downloaded_bytes) || 0) / Number(f.size) : 1,
         })),
         trackers: trackerRows.map((t) => ({
           url: t.url,
@@ -156,62 +190,91 @@ export class DatabaseService {
     return torrents;
   }
 
+  /**
+   * Atomically inserts a torrent and its associated files and trackers.
+   * Runs inside an explicit transaction so that failures never leave orphaned rows,
+   * and parameters are sanitized to prevent NullPointerExceptions in native SQLite.
+   */
   public async insertTorrent(torrent: Partial<TorrentItem>): Promise<void> {
     const db = await this.getDb();
-    const hash = (torrent.infoHash || '').toLowerCase();
-    const existing = await db.getFirstAsync<any>(
-      `SELECT 1 FROM torrents WHERE info_hash = ? LIMIT 1;`,
-      [hash]
-    );
-    if (existing) {
-      throw new Error(`Torrent with hash ${hash} already exists`);
+    const hash = (torrent.infoHash || '').toLowerCase().trim();
+    if (!hash) {
+      throw new Error('Cannot insert torrent without a valid infoHash');
     }
 
-    const posRow = await db.getFirstAsync<any>(
-      `SELECT COALESCE(MAX(queue_position), 0) + 1 AS next_pos FROM torrents;`
-    );
-    const nextPos = posRow?.next_pos || 1;
-
-    await db.runAsync(
-      `INSERT INTO torrents (
-        info_hash, name, total_size, downloaded_bytes, uploaded_bytes,
-        status, save_path, piece_length, num_pieces, added_date, queue_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      [
-        hash,
-        torrent.name || 'Unnamed',
-        torrent.totalSize || 0,
-        torrent.downloadedBytes || 0,
-        torrent.uploadedBytes || 0,
-        torrent.status || 'checking',
-        torrent.savePath || '',
-        torrent.pieceLength || 0,
-        torrent.numPieces || 0,
-        torrent.addedDate || Date.now(),
-        nextPos,
-      ]
-    );
-
-    if (torrent.files && torrent.files.length > 0) {
-      for (const f of torrent.files) {
-        await db.runAsync(
-          `INSERT INTO torrent_files (
-            info_hash, file_index, path, size, offset, downloaded_bytes, priority
-          ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
-          [hash, f.index, f.path, f.size, f.offset, f.downloadedBytes || 0, f.priority || 4]
-        );
+    await db.withTransactionAsync(async () => {
+      const existing = await db.getFirstAsync<any>(
+        `SELECT 1 FROM torrents WHERE info_hash = ? LIMIT 1;`,
+        [hash]
+      );
+      if (existing) {
+        throw new Error(`Torrent with hash ${hash} already exists`);
       }
-    }
 
-    if (torrent.trackers && torrent.trackers.length > 0) {
-      for (let i = 0; i < torrent.trackers.length; i++) {
-        const tr = torrent.trackers[i];
-        await db.runAsync(
-          `INSERT OR IGNORE INTO trackers (info_hash, url, tier) VALUES (?, ?, ?);`,
-          [hash, tr.url, tr.tier ?? i]
-        );
+      const posRow = await db.getFirstAsync<any>(
+        `SELECT COALESCE(MAX(queue_position), 0) + 1 AS next_pos FROM torrents;`
+      );
+      const nextPos = posRow?.next_pos || 1;
+
+      await db.runAsync(
+        `INSERT INTO torrents (
+          info_hash, name, total_size, downloaded_bytes, uploaded_bytes,
+          status, save_path, piece_length, num_pieces, added_date, queue_position
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          hash,
+          torrent.name || 'Unnamed',
+          typeof torrent.totalSize === 'number' ? torrent.totalSize : 0,
+          typeof torrent.downloadedBytes === 'number' ? torrent.downloadedBytes : 0,
+          typeof torrent.uploadedBytes === 'number' ? torrent.uploadedBytes : 0,
+          torrent.status || 'checking',
+          torrent.savePath || '',
+          typeof torrent.pieceLength === 'number' ? torrent.pieceLength : 0,
+          typeof torrent.numPieces === 'number' ? torrent.numPieces : 0,
+          typeof torrent.addedDate === 'number' ? torrent.addedDate : Date.now(),
+          nextPos,
+        ]
+      );
+
+      if (Array.isArray(torrent.files) && torrent.files.length > 0) {
+        for (let i = 0; i < torrent.files.length; i++) {
+          const f = torrent.files[i];
+          const fileIndex = typeof f.index === 'number' ? f.index : i;
+          const filePath = typeof f.path === 'string' && f.path.trim() ? f.path.trim() : `file_${fileIndex}`;
+          const fileSize = typeof f.size === 'number' ? f.size : 0;
+          const fileOffset = typeof f.offset === 'number' ? f.offset : 0;
+          const downloadedBytes = typeof f.downloadedBytes === 'number' ? f.downloadedBytes : 0;
+          const priority = typeof f.priority === 'number' ? f.priority : 4;
+
+          await db.runAsync(
+            `INSERT OR REPLACE INTO torrent_files (
+              info_hash, file_index, path, size, offset, downloaded_bytes, priority
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+            [hash, fileIndex, filePath, fileSize, fileOffset, downloadedBytes, priority]
+          );
+        }
       }
-    }
+
+      if (Array.isArray(torrent.trackers) && torrent.trackers.length > 0) {
+        for (let i = 0; i < torrent.trackers.length; i++) {
+          const tr = torrent.trackers[i] as any;
+          let url = '';
+          let tier = i;
+          if (typeof tr === 'string') {
+            url = tr.trim();
+          } else if (tr && typeof tr === 'object') {
+            url = typeof tr.url === 'string' ? tr.url.trim() : '';
+            if (typeof tr.tier === 'number') tier = tr.tier;
+          }
+          if (!url) continue;
+
+          await db.runAsync(
+            `INSERT OR IGNORE INTO trackers (info_hash, url, tier) VALUES (?, ?, ?);`,
+            [hash, url, tier]
+          );
+        }
+      }
+    });
   }
 
   public async updateTorrentStatus(
@@ -220,9 +283,11 @@ export class DatabaseService {
     errorMessage?: string
   ): Promise<void> {
     const db = await this.getDb();
+    const hash = (infoHash || '').toLowerCase().trim();
+    if (!hash) return;
     await db.runAsync(
       `UPDATE torrents SET status = ?, error_message = ? WHERE info_hash = ?;`,
-      [status, errorMessage || null, infoHash.toLowerCase()]
+      [status, errorMessage ?? null, hash]
     );
   }
 
@@ -233,22 +298,25 @@ export class DatabaseService {
     completedDate?: number | null
   ): Promise<void> {
     const db = await this.getDb();
+    const hash = (infoHash || '').toLowerCase().trim();
+    if (!hash) return;
     if (completedDate) {
       await db.runAsync(
         `UPDATE torrents SET downloaded_bytes = ?, uploaded_bytes = ?, completed_date = ? WHERE info_hash = ?;`,
-        [downloaded, uploaded, completedDate, infoHash.toLowerCase()]
+        [downloaded || 0, uploaded || 0, completedDate, hash]
       );
     } else {
       await db.runAsync(
         `UPDATE torrents SET downloaded_bytes = ?, uploaded_bytes = ? WHERE info_hash = ?;`,
-        [downloaded, uploaded, infoHash.toLowerCase()]
+        [downloaded || 0, uploaded || 0, hash]
       );
     }
   }
 
   public async deleteTorrent(infoHash: string): Promise<void> {
     const db = await this.getDb();
-    const hash = infoHash.toLowerCase();
+    const hash = (infoHash || '').toLowerCase().trim();
+    if (!hash) return;
     await db.withTransactionAsync(async () => {
       await db.runAsync(`DELETE FROM torrent_files WHERE info_hash = ?;`, [hash]);
       await db.runAsync(`DELETE FROM trackers WHERE info_hash = ?;`, [hash]);
@@ -259,12 +327,14 @@ export class DatabaseService {
   public async saveSettings(settings: SessionSettings): Promise<void> {
     const db = await this.getDb();
     const entries = Object.entries(settings);
-    for (const [k, v] of entries) {
-      await db.runAsync(
-        `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?);`,
-        [k, String(v)]
-      );
-    }
+    await db.withTransactionAsync(async () => {
+      for (const [k, v] of entries) {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?);`,
+          [k, String(v ?? '')]
+        );
+      }
+    });
   }
 
   public async loadSettings(): Promise<SessionSettings> {
@@ -303,5 +373,14 @@ export class DatabaseService {
     }
     return result;
   }
-}
 
+  public async closeDatabase(): Promise<void> {
+    if (this.db) {
+      try {
+        await this.db.closeAsync();
+      } catch (_) {}
+      this.db = null;
+      this.initPromise = null;
+    }
+  }
+}

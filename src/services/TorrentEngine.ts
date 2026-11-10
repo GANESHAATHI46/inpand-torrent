@@ -1,6 +1,6 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { DatabaseService } from './DatabaseService';
-import { TorrentItem, TorrentStatus, SessionSettings, DashboardStats } from '../types/torrent';
+import { TorrentItem, TorrentStatus, SessionSettings, DashboardStats, FilePriority } from '../types/torrent';
 import { parseTorrentBase64 } from '../utils/torrentParser';
 
 export interface IncomingTorrentIntent {
@@ -31,6 +31,8 @@ export class TorrentEngine {
   private lastDbSaveTime: Map<string, number> = new Map();
   private listeners: Set<(torrents: TorrentItem[], stats: DashboardStats) => void> = new Set();
   private isInitialized = false;
+  private initPromise: Promise<void> | null = null;
+  private listenersAttached = false;
 
   private constructor() {
     this.db = DatabaseService.getInstance();
@@ -45,57 +47,67 @@ export class TorrentEngine {
 
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
+    if (this.initPromise) return this.initPromise;
 
-    // 1. Restore persisted torrents from SQLite
-    const persisted = await this.db.loadAllTorrents();
-    for (const t of persisted) {
-      this.activeTorrents.set(t.infoHash.toLowerCase(), t);
-    }
-
-    // 2. Attach native engine event listeners if available
-    if (engineEmitter && Platform.OS === 'android') {
-      engineEmitter.addListener('onTorrentStateUpdated', this.handleStateUpdate.bind(this));
-      engineEmitter.addListener('onTorrentFinished', this.handleTorrentFinished.bind(this));
-      engineEmitter.addListener('onMetadataReceived', this.handleMetadataReceived.bind(this));
-      engineEmitter.addListener('onTorrentError', this.handleTorrentError.bind(this));
-
-      // Inform native engine to restore session with fast resume data
+    this.initPromise = (async () => {
       try {
-        await TorrentEngineModule.initializeSession();
-        // Restore active torrents into native engine session
+        // 1. Restore persisted torrents from SQLite
+        const persisted = await this.db.loadAllTorrents();
         for (const t of persisted) {
-          if (t.status !== 'paused' && t.status !== 'error') {
-            try {
-              if (typeof TorrentEngineModule.restoreTorrent === 'function') {
-                await TorrentEngineModule.restoreTorrent(
-                  t.infoHash,
-                  t.name,
-                  t.savePath,
-                  t.totalSize,
-                  t.downloadedBytes,
-                  t.status
-                );
+          this.activeTorrents.set(t.infoHash.toLowerCase(), t);
+        }
+
+        // 2. Attach native engine event listeners if available (once)
+        if (engineEmitter && Platform.OS === 'android' && !this.listenersAttached) {
+          this.listenersAttached = true;
+          engineEmitter.addListener('onTorrentStateUpdated', this.handleStateUpdate.bind(this));
+          engineEmitter.addListener('onTorrentFinished', this.handleTorrentFinished.bind(this));
+          engineEmitter.addListener('onMetadataReceived', this.handleMetadataReceived.bind(this));
+          engineEmitter.addListener('onTorrentError', this.handleTorrentError.bind(this));
+
+          // Inform native engine to restore session with fast resume data
+          try {
+            await TorrentEngineModule.initializeSession();
+            // Restore active torrents into native engine session
+            for (const t of persisted) {
+              if (t.status !== 'paused' && t.status !== 'error') {
+                try {
+                  if (typeof TorrentEngineModule.restoreTorrent === 'function') {
+                    await TorrentEngineModule.restoreTorrent(
+                      t.infoHash,
+                      t.name,
+                      t.savePath,
+                      t.totalSize,
+                      t.downloadedBytes,
+                      t.status
+                    );
+                  }
+                } catch (restErr) {
+                  console.warn('Failed restoring torrent in native session:', t.infoHash, restErr);
+                }
               }
-            } catch (restErr) {
-              console.warn('Failed restoring torrent in native session:', t.infoHash, restErr);
             }
+          } catch (e) {
+            console.warn('Native TorrentEngineModule initializeSession failed:', e);
+          }
+        } else if (Platform.OS !== 'android') {
+          // In Web / Local JS environment, automatically start mock timer if there are active torrents
+          const hasActive = persisted.some(
+            (t) => t.status === 'downloading' || t.status === 'downloading_metadata'
+          );
+          if (hasActive) {
+            this.startWebMockTimer();
           }
         }
-      } catch (e) {
-        console.warn('Native TorrentEngineModule initializeSession failed:', e);
-      }
-    } else {
-      // In Web / Local JS environment, automatically start mock timer if there are active torrents
-      const hasActive = persisted.some(
-        (t) => t.status === 'downloading' || t.status === 'downloading_metadata'
-      );
-      if (hasActive) {
-        this.startWebMockTimer();
-      }
-    }
 
-    this.isInitialized = true;
-    this.notifyListeners();
+        this.isInitialized = true;
+        this.notifyListeners();
+      } finally {
+        this.initPromise = null;
+      }
+    })();
+
+    return this.initPromise;
   }
 
   public subscribe(listener: (torrents: TorrentItem[], stats: DashboardStats) => void): () => void {
@@ -245,6 +257,9 @@ export class TorrentEngine {
         await TorrentEngineModule.addMagnet(cleanUri, savePath);
       } catch (err) {
         console.warn('Native addMagnet call error:', err);
+        this.activeTorrents.delete(infoHash);
+        await this.db.deleteTorrent(infoHash).catch(() => {});
+        throw err;
       }
     } else {
       // In Web / JS environment, immediately activate download simulation
@@ -319,19 +334,53 @@ export class TorrentEngine {
     }
 
     if (TorrentEngineModule && Platform.OS === 'android') {
+      let infoHash = '';
       try {
         const result = await TorrentEngineModule.addTorrentFile(fileBytesBase64, savePath);
-        const infoHash = (result.infoHash || proposedHash).toLowerCase();
+        infoHash = (result.infoHash || proposedHash).toLowerCase();
 
         if (this.activeTorrents.has(infoHash)) {
           throw new Error('Torrent with this hash is already in the download list');
         }
 
+        const rawFiles = result.files && result.files.length > 0 ? result.files : parsedMeta?.files || [];
+        const formattedFiles = rawFiles.map((f: any, idx: number) => ({
+          index: typeof f.index === 'number' ? f.index : idx,
+          path: f.path || `file_${idx}`,
+          size: Number(f.size) || 0,
+          offset: Number(f.offset) || 0,
+          downloadedBytes: Number(f.downloadedBytes) || 0,
+          priority: (Number(f.priority) || 4) as FilePriority,
+          progress: f.size > 0 ? (Number(f.downloadedBytes) || 0) / Number(f.size) : 0,
+        }));
+
+        const rawTrackers = result.trackers && result.trackers.length > 0 ? result.trackers : parsedMeta?.trackers || [];
+        const formattedTrackers = rawTrackers.map((tr: any, idx: number) => {
+          if (typeof tr === 'string') {
+            return {
+              url: tr,
+              tier: idx,
+              status: 'not_contacted',
+              peers: 0,
+              seeds: 0,
+              message: '',
+            };
+          }
+          return {
+            url: tr.url || '',
+            tier: typeof tr.tier === 'number' ? tr.tier : idx,
+            status: tr.status || 'not_contacted',
+            peers: Number(tr.peers) || 0,
+            seeds: Number(tr.seeds) || 0,
+            message: tr.message || '',
+          };
+        });
+
         const item: TorrentItem = {
           infoHash,
           name: result.name || parsedMeta?.name || name,
           status: (result.status as TorrentStatus) || 'connecting_peers',
-          totalSize: result.totalSize || parsedMeta?.totalSize || 0,
+          totalSize: Number(result.totalSize) || Number(parsedMeta?.totalSize) || 0,
           downloadedBytes: 0,
           uploadedBytes: 0,
           downloadRate: 0,
@@ -345,17 +394,23 @@ export class TorrentEngine {
           savePath,
           addedDate: Date.now(),
           completedDate: null,
-          pieceLength: result.pieceLength || parsedMeta?.pieceLength || 0,
-          numPieces: result.numPieces || parsedMeta?.numPieces || 0,
-          files: result.files && result.files.length > 0 ? result.files : parsedMeta?.files || [],
-          trackers: result.trackers && result.trackers.length > 0 ? result.trackers : parsedMeta?.trackers || [],
+          pieceLength: Number(result.pieceLength) || Number(parsedMeta?.pieceLength) || 0,
+          numPieces: Number(result.numPieces) || Number(parsedMeta?.numPieces) || 0,
+          files: formattedFiles,
+          trackers: formattedTrackers,
           peers: [],
         };
+
         await this.db.insertTorrent(item);
         this.activeTorrents.set(infoHash, item);
         this.notifyListeners();
         return item;
       } catch (err: any) {
+        if (infoHash && TorrentEngineModule && typeof TorrentEngineModule.removeTorrent === 'function') {
+          try {
+            await TorrentEngineModule.removeTorrent(infoHash, false);
+          } catch (_) {}
+        }
         throw new Error(err?.message || `Failed to add torrent: ${err}`);
       }
     } else {
