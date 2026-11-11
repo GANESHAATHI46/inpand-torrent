@@ -12,15 +12,3 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
-
-# TorrentFlow Native JNI & Services
--keepclassmembers class * {
-    native <methods>;
-}
--keep class org.libtorrent4j.** { *; }
--dontwarn org.libtorrent4j.**
--keep class com.torrentflow.mobile.native.** { *; }
--keepclassmembers class com.torrentflow.mobile.native.TorrentEngineJni { *; }
--keep class com.torrentflow.mobile.bridge.** { *; }
--keep class com.torrentflow.mobile.service.** { *; }
--keep class com.torrentflow.mobile.torrent.** { *; }

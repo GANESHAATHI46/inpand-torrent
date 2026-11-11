@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:python": "python -m unittest discover -s tests/python -p \"test_*.py\""
+    "test:python": "python -m unittest discover -s tests/python -p \"test_*.py\"",
+    "postinstall": "node scripts/patch-reanimated.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",

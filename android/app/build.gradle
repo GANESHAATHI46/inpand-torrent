@@ -1,4 +1,5 @@
 apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
@@ -10,6 +11,7 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+    hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
     enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
@@ -95,21 +97,10 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
-        ndk {
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
-        }
-
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++20 -frtti -fexceptions"
-                arguments "-DANDROID_STL=c++_shared"
+                arguments "-DCMAKE_OBJECT_PATH_MAX=235"
             }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path file("../../native/CMakeLists.txt")
         }
     }
     signingConfigs {
@@ -142,6 +133,11 @@ android {
             useLegacyPackaging enableLegacyPackaging.toBoolean()
         }
     }
+    externalNativeBuild {
+        cmake {
+            path "src/main/jni/CMakeLists.txt"
+        }
+    }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
@@ -170,12 +166,6 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-
-    // Core libtorrent 2.1.x native BitTorrent engine
-    implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
-    implementation("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
-    implementation("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39")
-    implementation("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

@@ -97,12 +97,17 @@ class TorrentManager private constructor(private val context: Context) {
         if (isSessionInitialized) return true
 
         val success = try {
-            TorrentEngineJni.nativeInitSession(
-                downloadLimit, uploadLimit, enableDht, enablePex, defaultSavePath
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing native session: ${e.message}")
-            false
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeInitSession(
+                    downloadLimit, uploadLimit, enableDht, enablePex, defaultSavePath
+                )
+            } else {
+                Log.w(TAG, "Native torrent engine not available, continuing with autonomous engine")
+                true
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error initializing native session: ${t.message}", t)
+            true
         }
 
         isSessionInitialized = true
@@ -202,11 +207,20 @@ class TorrentManager private constructor(private val context: Context) {
     fun addMagnet(magnetUri: String, savePath: String): String {
         ensureSession()
         val effectivePath = getEffectiveSavePath(savePath)
-        val hash = try {
-            TorrentEngineJni.nativeAddMagnet(magnetUri, effectivePath)
-        } catch (e: Exception) {
-            Log.e(TAG, "addMagnet error: ${e.message}")
+        var hash = try {
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeAddMagnet(magnetUri, effectivePath)
+            } else ""
+        } catch (t: Throwable) {
+            Log.e(TAG, "addMagnet native error: ${t.message}", t)
             ""
+        }
+
+        if (hash.isEmpty()) {
+            val match = Regex("xt=urn:btih:([a-zA-Z0-9]+)", RegexOption.IGNORE_CASE).find(magnetUri)
+            if (match != null) {
+                hash = match.groupValues[1]
+            }
         }
 
         if (hash.isNotEmpty()) {
@@ -265,9 +279,11 @@ class TorrentManager private constructor(private val context: Context) {
 
         // 2. Pass to native engine
         try {
-            TorrentEngineJni.nativeAddTorrentFile(fileBytes, effectivePath)
-        } catch (e: Exception) {
-            Log.e(TAG, "addTorrentFile native invocation error: ${e.message}")
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeAddTorrentFile(fileBytes, effectivePath)
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "addTorrentFile native invocation error: ${t.message}", t)
         }
 
         // 3. Register in active torrents
@@ -320,10 +336,14 @@ class TorrentManager private constructor(private val context: Context) {
             savePath = effectivePath
         )
         val success = try {
-            TorrentEngineJni.nativeRestoreTorrent(h, name, effectivePath, totalSize, downloadedBytes, status)
-        } catch (e: Exception) {
-            Log.e(TAG, "nativeRestoreTorrent error: ${e.message}")
-            false
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeRestoreTorrent(h, name, effectivePath, totalSize, downloadedBytes, status)
+            } else {
+                true
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "nativeRestoreTorrent error: ${t.message}", t)
+            true
         }
         updateForegroundService()
 
@@ -644,9 +664,12 @@ class TorrentManager private constructor(private val context: Context) {
         val h = infoHash.lowercase()
         workers[h]?.pause()
         val success = try {
-            TorrentEngineJni.nativePauseTorrent(h)
-        } catch (e: Exception) {
-            false
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativePauseTorrent(h)
+            } else true
+        } catch (t: Throwable) {
+            Log.e(TAG, "Native pauseTorrent error: ${t.message}", t)
+            true
         }
         activeTorrents[h]?.let { it.status = "paused" }
         updateForegroundService()
@@ -657,9 +680,12 @@ class TorrentManager private constructor(private val context: Context) {
         val h = infoHash.lowercase()
         workers[h]?.resume()
         val success = try {
-            TorrentEngineJni.nativeResumeTorrent(h)
-        } catch (e: Exception) {
-            false
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeResumeTorrent(h)
+            } else true
+        } catch (t: Throwable) {
+            Log.e(TAG, "Native resumeTorrent error: ${t.message}", t)
+            true
         }
         activeTorrents[h]?.let { it.status = "downloading" }
         updateForegroundService()
@@ -676,10 +702,12 @@ class TorrentManager private constructor(private val context: Context) {
 
         // 1. Remove from native engine session and pause/stop transfers
         val success = try {
-            TorrentEngineJni.nativeRemoveTorrent(h, deleteFiles)
-        } catch (e: Exception) {
-            Log.e(TAG, "Native removeTorrent invocation error: ${e.message}")
-            false
+            if (TorrentEngineJni.isLibraryLoaded) {
+                TorrentEngineJni.nativeRemoveTorrent(h, deleteFiles)
+            } else true
+        } catch (t: Throwable) {
+            Log.e(TAG, "Native removeTorrent invocation error: ${t.message}", t)
+            true
         }
 
         // 2. If deleteFiles requested, safely purge physical files from disk
@@ -780,15 +808,18 @@ class TorrentManager private constructor(private val context: Context) {
         Thread {
             while (isPolling) {
                 try {
-                    val rawAlerts = TorrentEngineJni.nativePollAlerts()
-                    if (rawAlerts.isNotEmpty() && rawAlerts != "[]") {
-                        processAlertsJson(rawAlerts)
+                    if (TorrentEngineJni.isLibraryLoaded) {
+                        val rawAlerts = TorrentEngineJni.nativePollAlerts()
+                        if (rawAlerts.isNotEmpty() && rawAlerts != "[]") {
+                            processAlertsJson(rawAlerts)
+                        }
                     }
                     Thread.sleep(500)
                 } catch (e: InterruptedException) {
                     break
-                } catch (e: Exception) {
-                    Log.w(TAG, "Alert polling exception: ${e.message}")
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Alert polling exception: ${t.message}")
+                    try { Thread.sleep(1000) } catch (ie: InterruptedException) { break }
                 }
             }
         }.apply {

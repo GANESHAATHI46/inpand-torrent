@@ -8,12 +8,18 @@ import android.util.Log
 object TorrentEngineJni {
     private const val TAG = "TorrentEngineJni"
 
+    @Volatile
+    var isLibraryLoaded: Boolean = false
+        private set
+
     init {
         try {
             System.loadLibrary("torrentflow_native")
-            Log.i(TAG, "Successfully loaded native library torrentflow_native")
-        } catch (e: UnsatisfiedLinkError) {
-            Log.w(TAG, "Native library torrentflow_native not found in local runtime: ${e.message}")
+            isLibraryLoaded = true
+            Log.i(TAG, "Successfully loaded native library 'torrentflow_native'")
+        } catch (t: Throwable) {
+            isLibraryLoaded = false
+            Log.e(TAG, "Failed to load native library 'torrentflow_native': ${t.message}", t)
         }
     }
 
@@ -54,4 +60,3 @@ object TorrentEngineJni {
 
     external fun nativePollAlerts(): String
 }
-
