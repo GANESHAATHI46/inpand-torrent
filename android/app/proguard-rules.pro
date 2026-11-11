@@ -11,4 +11,11 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# rasterbar libtorrent4j SWIG JNI rules
+-keep class org.libtorrent4j.** { *; }
+-keep class org.libtorrent4j.swig.** { *; }
+-keepclasseswithmembernames class org.libtorrent4j.swig.libtorrent_jni {
+    native <methods>;
+}
+
 # Add any project specific keep options here:

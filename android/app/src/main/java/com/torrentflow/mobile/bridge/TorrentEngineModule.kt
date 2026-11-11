@@ -10,7 +10,7 @@ import java.io.File
 import java.io.FileInputStream
 
 class TorrentEngineModule(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext), TorrentManager.AlertListener {
+    ReactContextBaseJavaModule(reactContext), TorrentManager.TorrentEventListener {
 
     private val manager: TorrentManager by lazy {
         TorrentManager.getInstance(reactContext)
