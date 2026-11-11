@@ -27,7 +27,7 @@ export default function DashboardScreen() {
   const { torrents, stats, pauseAll, resumeAll } = useTorrentSession();
   const [refreshing, setRefreshing] = useState(false);
   const [diskSpace, setDiskSpace] = useState({ free: 0, total: 0 });
-  const scrollRef = useTabScrollReset<ScrollView>();
+  const scrollRef = useTabScrollReset();
 
   useEffect(() => {
     StorageService.getInstance().getAvailableDiskSpace().then(setDiskSpace);

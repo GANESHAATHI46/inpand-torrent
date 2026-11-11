@@ -26,7 +26,7 @@ export default function SettingsScreen() {
   const { colors, spacing, typography, themeMode, setThemeMode, isDark } = useTheme();
   const db = DatabaseService.getInstance();
   const router = useRouter();
-  const scrollRef = useTabScrollReset<ScrollView>();
+  const scrollRef = useTabScrollReset();
 
   const [settings, setSettings] = useState<SessionSettings>({
     downloadRateLimit: 0,

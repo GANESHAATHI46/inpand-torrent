@@ -7,12 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "torrentflow",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.torrentflow.mobile"
@@ -69,7 +63,15 @@
     "plugins": [
       "expo-router",
       "./plugins/withTorrentEngine",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

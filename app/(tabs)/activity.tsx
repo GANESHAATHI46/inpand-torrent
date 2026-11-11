@@ -11,7 +11,7 @@ import { useTabScrollReset } from '../../src/hooks/useTabScrollReset';
 export default function ActivityScreen() {
   const { colors, spacing, typography } = useTheme();
   const { stats, torrents } = useTorrentSession();
-  const scrollRef = useTabScrollReset<ScrollView>();
+  const scrollRef = useTabScrollReset();
 
   const [uptimeSeconds, setUptimeSeconds] = useState(1);
 

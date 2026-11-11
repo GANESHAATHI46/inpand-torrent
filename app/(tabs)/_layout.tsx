@@ -61,7 +61,7 @@ export default function TabLayout() {
             <Ionicons
               name={focused ? 'speedometer' : 'speedometer-outline'}
               size={22}
-              color={color}
+              color={color ? String(color) : (focused ? colors.primaryLight : colors.textMuted)}
             />
           ),
         }}
@@ -74,7 +74,7 @@ export default function TabLayout() {
             <Ionicons
               name={focused ? 'cloud-download' : 'cloud-download-outline'}
               size={22}
-              color={color}
+              color={color ? String(color) : (focused ? colors.primaryLight : colors.textMuted)}
             />
           ),
         }}
@@ -87,7 +87,7 @@ export default function TabLayout() {
             <Ionicons
               name={focused ? 'pulse' : 'pulse-outline'}
               size={22}
-              color={color}
+              color={color ? String(color) : (focused ? colors.primaryLight : colors.textMuted)}
             />
           ),
         }}
@@ -100,7 +100,7 @@ export default function TabLayout() {
             <Ionicons
               name={focused ? 'settings' : 'settings-outline'}
               size={22}
-              color={color}
+              color={color ? String(color) : (focused ? colors.primaryLight : colors.textMuted)}
             />
           ),
         }}

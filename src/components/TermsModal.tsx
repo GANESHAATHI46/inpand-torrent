@@ -132,11 +132,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({
           },
         ]}
       >
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          translucent={true}
-          backgroundColor="transparent"
-        />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
         {/* Modal Header with Safe Inset Protection */}
         <View

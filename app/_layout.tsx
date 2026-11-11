@@ -43,7 +43,7 @@ function RootNav() {
 
   return (
     <>
-      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <TermsModal />
       <Stack
         screenOptions={{

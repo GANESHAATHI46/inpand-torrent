@@ -20,8 +20,16 @@ export interface IncomingTorrentIntent {
   }>;
 }
 
+export type TorrentEngineEventMap = {
+  onTorrentStateUpdated: [any];
+  onTorrentFinished: [any];
+  onMetadataReceived: [any];
+  onTorrentError: [any];
+  onTorrentReceived: [IncomingTorrentIntent];
+};
+
 const { TorrentEngineModule } = NativeModules;
-const engineEmitter = TorrentEngineModule ? new NativeEventEmitter(TorrentEngineModule) : null;
+const engineEmitter = TorrentEngineModule ? new NativeEventEmitter<TorrentEngineEventMap>(TorrentEngineModule) : null;
 
 export class TorrentEngine {
   private static instance: TorrentEngine;
