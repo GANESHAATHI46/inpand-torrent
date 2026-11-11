@@ -215,6 +215,28 @@ export class TorrentEngine {
 
   public async addMagnet(magnetUri: string, customSavePath?: string): Promise<TorrentItem> {
     const cleanUri = magnetUri.trim();
+
+    // If input is an HTTP or HTTPS URL to a torrent file, fetch and route to addTorrentFile
+    if (cleanUri.startsWith('http://') || cleanUri.startsWith('https://')) {
+      const resp = await fetch(cleanUri);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch torrent from URL: HTTP ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const res = reader.result as string;
+          resolve(res.split(',')[1] || '');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const urlParts = cleanUri.split('/');
+      const fileName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || 'downloaded.torrent';
+      return await this.addTorrentFile(base64, fileName, customSavePath);
+    }
+
     const match = cleanUri.match(/xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
     if (!match) {
       throw new Error('Invalid magnet URI: missing 40-hex or 32-base32 info-hash');

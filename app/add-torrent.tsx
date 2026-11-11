@@ -199,11 +199,11 @@ export default function AddTorrentModal() {
       />
 
       <ScrollView contentContainerStyle={[styles.content, { padding: spacing.lg }]}>
-        {/* Magnet Link Input Section */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>MAGNET LINK</Text>
+        {/* Magnet Link or URL Input Section */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>MAGNET OR TORRENT URL</Text>
         <Card style={{ marginTop: spacing.xs }}>
           <TextInput
-            placeholder="Paste magnet:?xt=urn:btih:... URI here"
+            placeholder="Paste magnet URI or http(s) .torrent URL here"
             placeholderTextColor={colors.textMuted}
             value={magnetInput}
             onChangeText={(txt) => {

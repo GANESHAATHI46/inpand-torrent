@@ -74,14 +74,31 @@ object TorrentIntentHandler {
             return processTorrentUri(dataUri, intent.type, context, "ACTION_VIEW")
         }
 
+        // Case 3: HTTP/HTTPS URL to a .torrent file
+        if (scheme == "http" || scheme == "https") {
+            val urlStr = dataUri.toString()
+            if (urlStr.contains(".torrent", ignoreCase = true) || intent.type?.contains("bittorrent", ignoreCase = true) == true) {
+                downloadAndProcessHttpTorrent(urlStr, context, "ACTION_VIEW")
+                return true
+            }
+        }
+
         return false
     }
 
     private fun handleSendIntent(intent: Intent, context: Context): Boolean {
-        // Shared text might be a magnet link
+        // Shared text might be a magnet link or http(s) torrent URL
         val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-        if (!sharedText.isNullOrBlank() && sharedText.trim().lowercase().startsWith("magnet:?")) {
-            return dispatchMagnet(sharedText.trim(), "ACTION_SEND")
+        if (!sharedText.isNullOrBlank()) {
+            val text = sharedText.trim()
+            if (text.lowercase().startsWith("magnet:?")) {
+                return dispatchMagnet(text, "ACTION_SEND")
+            } else if (text.startsWith("http://", ignoreCase = true) || text.startsWith("https://", ignoreCase = true)) {
+                if (text.contains(".torrent", ignoreCase = true)) {
+                    downloadAndProcessHttpTorrent(text, context, "ACTION_SEND")
+                    return true
+                }
+            }
         }
 
         // Shared stream URI
@@ -302,6 +319,56 @@ object TorrentIntentHandler {
             return false
         }
         return false
+    }
+
+    private fun downloadAndProcessHttpTorrent(urlStr: String, context: Context, sourceAction: String) {
+        val now = System.currentTimeMillis()
+        if (urlStr == lastProcessedUri && (now - lastProcessedTimestamp) < 1500L) {
+            return
+        }
+        lastProcessedUri = urlStr
+        lastProcessedTimestamp = now
+
+        Thread {
+            try {
+                val url = java.net.URL(urlStr)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.instanceFollowRedirects = true
+                conn.connect()
+
+                if (conn.responseCode in 200..299) {
+                    val rawName = urlStr.substringAfterLast('/').substringBefore('?')
+                    val fileName = sanitizeFileName(if (rawName.endsWith(".torrent", ignoreCase = true)) rawName else "downloaded.torrent")
+                    val cacheDir = File(context.cacheDir, "incoming_torrents").apply { mkdirs() }
+                    val targetFile = File(cacheDir, "${System.currentTimeMillis()}_$fileName")
+                    conn.inputStream.use { input ->
+                        targetFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    if (isValidTorrentFile(targetFile)) {
+                        val payload = Arguments.createMap().apply {
+                            putString("type", "torrent_file")
+                            putString("action", sourceAction)
+                            putString("uri", urlStr)
+                            putString("fileName", fileName)
+                            putDouble("fileSize", targetFile.length().toDouble())
+                            putString("filePath", targetFile.absolutePath)
+                            putString("mimeType", "application/x-bittorrent")
+                        }
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            dispatchPayload(payload)
+                        }
+                    } else {
+                        targetFile.delete()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed downloading torrent from $urlStr: ${e.message}")
+            }
+        }.start()
     }
 
     private fun sanitizeFileName(name: String): String {
